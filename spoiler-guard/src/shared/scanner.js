@@ -59,7 +59,12 @@
         console.warn('[Spoiler Guard] failed to check an item', err);
       } finally {
         // Always mark checked, so the pre-hide CSS lifts even if checking failed.
+        // Nested card elements are marked too: they're checked as part of their
+        // outer card, and the pre-hide CSS would otherwise hide them forever.
         if (!card.hasAttribute(CHECKED_ATTR)) card.setAttribute(CHECKED_ATTR, '');
+        for (const inner of card.querySelectorAll(adapter.cardSelector)) {
+          if (!inner.hasAttribute(CHECKED_ATTR)) inner.setAttribute(CHECKED_ATTR, '');
+        }
       }
     }
 

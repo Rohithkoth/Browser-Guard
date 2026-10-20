@@ -180,3 +180,31 @@ test('rule names are inserted as text, never as HTML', () => {
   assert.equal($('#spoiler').querySelectorAll('img[onerror]').length, 0);
   assert.match(hostOf($('#spoiler')).getAttribute('aria-label'), /<img src=x/);
 });
+
+// Regression: inner cards were never marked checked, so the pre-hide CSS kept
+// every nested card (YouTube home/channel grids, Instagram feed images) invisible.
+test('nested cards are marked checked, so pre-hide never keeps them hidden', async () => {
+  const nested = (id, title) =>
+    `<ytd-rich-item-renderer id="${id}"><yt-lockup-view-model id="${id}-inner"><h3>${title}</h3></yt-lockup-view-model></ytd-rich-item-renderer>`;
+  const { w, apply, $ } = setup('<div id="grid">' + nested('safe', 'Cooking pasta') + nested('spoiler', 'Avengers Doomsday') + '</div>');
+  apply([DOOMSDAY]);
+  for (const id of ['safe', 'safe-inner', 'spoiler', 'spoiler-inner']) {
+    assert.ok($('#' + id).hasAttribute('data-sg-checked'), `${id} should be checked`);
+  }
+
+  $('#grid').insertAdjacentHTML('beforeend', nested('late', 'Lo-fi beats'));
+  await flush();
+  assert.ok($('#late').hasAttribute('data-sg-checked'));
+  assert.ok($('#late-inner').hasAttribute('data-sg-checked'));
+  assert.equal(w.document.querySelectorAll('.sg-concealed').length, 1);
+});
+
+test('Instagram: the post link inside a feed article is marked checked', () => {
+  const { apply, $ } = setup(
+    '<article id="post"><a id="inner-link" href="/p/ABC/"><img alt="a dog"></a><span>beach day</span></article>',
+    'instagram',
+  );
+  apply([DOOMSDAY]);
+  assert.ok($('#post').hasAttribute('data-sg-checked'));
+  assert.ok($('#inner-link').hasAttribute('data-sg-checked'));
+});
