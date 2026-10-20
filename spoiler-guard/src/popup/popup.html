@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Spoiler Guard</title>
+  <link rel="stylesheet" href="../ui.css">
+  <style>
+    body { width: 280px; }
+    .wrap { padding: 14px; display: grid; gap: 12px; }
+    ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+    li { overflow-wrap: anywhere; }
+    h2 { margin: 0; font-size: 13px; color: var(--muted); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <label class="switch">
+      <input type="checkbox" id="enabled">
+      <strong>Spoiler Guard is on</strong>
+    </label>
+    <div>
+      <h2 id="active-heading">Active rules</h2>
+      <ul id="active-rules"></ul>
+    </div>
+    <button id="open-options">Manage rules</button>
+  </div>
+  <script src="../shared/normalize.js"></script>
+  <script src="../shared/rules.js"></script>
+  <script src="../shared/storage.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>
