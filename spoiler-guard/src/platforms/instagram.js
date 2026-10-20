@@ -14,10 +14,28 @@
     'a[href*="/reel/"]',
   ];
 
+  // Feed posts: author link in the post header, caption in an h1, time in a
+  // <time> element ("2d"). Grid tiles only carry an image description.
+  function postAge(card) {
+    const time = card.querySelector('time');
+    if (!time) return '';
+    return SG.details.textOf(time) || '';
+  }
+
+  function imageDescription(card) {
+    const img = card.querySelector('img[alt]:not([alt=""])');
+    return img ? img.getAttribute('alt').trim() : '';
+  }
+
   SG.platforms = SG.platforms || {};
   SG.platforms.instagram = {
     name: 'instagram',
     matchesHost: (host) => host === 'www.instagram.com' || host === 'instagram.com',
     cardSelector: CARD_SELECTORS.join(', '),
+    getDetails: (card) => ({
+      title: SG.details.firstText(card, ['h1']) || imageDescription(card),
+      channel: SG.details.firstText(card, ['header a[href^="/"]']),
+      age: postAge(card),
+    }),
   };
 })(globalThis);

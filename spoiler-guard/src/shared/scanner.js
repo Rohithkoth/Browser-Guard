@@ -8,7 +8,16 @@
   // (aria-label, title, image alt) that titles and captions are often stored in.
   // Overlay text lives in a closed shadow root, so it never shows up here.
   function collectText(card) {
-    const parts = [card.textContent || ''];
+    // Text nodes are joined with spaces rather than read via textContent, which
+    // glues neighbouring elements together ("12:34" + "Doctor Doom" becomes
+    // "12:34Doctor Doom") and would hide a keyword at the start of a block.
+    const parts = [];
+    const walker = card.ownerDocument.createTreeWalker(card, 4 /* NodeFilter.SHOW_TEXT */);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      const tag = node.parentElement && node.parentElement.tagName;
+      if (tag === 'STYLE' || tag === 'SCRIPT') continue;
+      if (node.data.trim()) parts.push(node.data);
+    }
     for (const el of card.querySelectorAll('[aria-label], [title], img[alt]')) {
       if (el.classList.contains(SG.overlay.HOST_CLASS)) continue;
       const label = el.getAttribute('aria-label');
@@ -70,6 +79,16 @@
       return card;
     }
 
+    // Channel and upload time are shown on the cover to help decide whether to
+    // reveal. Any part containing a blocked keyword is left off, since the cover
+    // must never show what matched. The title is only shown when you ask for it.
+    function coverDetails(card) {
+      if (!adapter.getDetails) return {};
+      const d = adapter.getDetails(card);
+      const safe = (part) => (part && !SG.matchText(part, compiled).length ? part : '');
+      return { title: d.title || '', channel: safe(d.channel), age: safe(d.age) };
+    }
+
     function processCard(card) {
       try {
         const text = getText(card);
@@ -82,9 +101,15 @@
 
         const hits = compiled.length && !shownAnyway.has(card) ? SG.matchText(text, compiled) : [];
         if (hits.length) {
-          SG.overlay.conceal(card, hits, () => {
-            shownAnyway.set(card, seen.get(card).id);
-            SG.overlay.reveal(card);
+          // A reused card now showing a different video gets a fresh cover, so
+          // a title revealed for the old video doesn't carry over.
+          if (prev && prev.id !== id) SG.overlay.reveal(card);
+          SG.overlay.conceal(card, hits, {
+            details: coverDetails(card),
+            onReveal: () => {
+              shownAnyway.set(card, seen.get(card).id);
+              SG.overlay.reveal(card);
+            },
           });
         } else if (SG.overlay.isConcealed(card)) {
           SG.overlay.reveal(card);

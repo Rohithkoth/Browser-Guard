@@ -139,6 +139,51 @@
     showMessages([], warnings);
   });
 
+  // ---- Import / export ----
+  const shareMessages = $('share-messages');
+
+  function showShare(lines, kind) {
+    shareMessages.replaceChildren(...lines.map((t) => el('span', { className: kind, textContent: t })));
+  }
+
+  $('import-button').addEventListener('click', () => $('import-file').click());
+
+  $('import-file').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    e.target.value = ''; // so choosing the same file again still triggers a change
+    if (!file) return;
+    const now = Date.now();
+    const parsed = SG.parseRuleFile(await file.text(), now);
+    if (parsed.errors.length) {
+      showShare(['Nothing was imported. Fix these in the file and try again:', ...parsed.errors], 'error');
+      return;
+    }
+    const names = parsed.rules.map((r) => '• ' + r.name).join('\n');
+    if (!confirm(`Import ${parsed.rules.length} rule${parsed.rules.length === 1 ? '' : 's'} from ${file.name}?\n\n${names}`)) return;
+    const { rules: merged, added, updated } = SG.mergeImported(rules, parsed.rules, now);
+    await persist(merged);
+    const summary = [`Imported ${file.name}: ${added} added, ${updated} updated.`];
+    showShare(summary, 'success');
+    if (parsed.warnings.length) {
+      shareMessages.append(...parsed.warnings.map((t) => el('span', { className: 'warning', textContent: t })));
+    }
+  });
+
+  $('export-button').addEventListener('click', () => {
+    if (!rules.length) {
+      showShare(['There are no rules to export yet.'], 'warning');
+      return;
+    }
+    const blob = new Blob([SG.formatRuleFile(rules)], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const link = el('a', { href: url, download: 'spoiler-guard-rules.txt' });
+    document.body.append(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    showShare([`Exported ${rules.length} rule${rules.length === 1 ? '' : 's'}. Heads up: the file lists keywords, which can be spoilers themselves.`], 'success');
+  });
+
   $('cancel-edit').addEventListener('click', () => {
     resetForm();
     showMessages([], []);

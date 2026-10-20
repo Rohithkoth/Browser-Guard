@@ -7,7 +7,7 @@ A personal Chrome extension that covers YouTube videos and Instagram posts match
 1. You create rules in the settings page, for example "Avengers: Doomsday" with keywords like `Avengers Doomsday` and `Doctor Doom`.
 2. On YouTube and Instagram, the extension watches the page for video cards and posts, including ones that load as you scroll.
 3. It reads each card's text (title, caption, hashtags, accessibility labels, image descriptions) and checks it against your active rules.
-4. A matching card gets an opaque cover that says which rule blocked it, never which keyword matched.
+4. A matching card gets an opaque cover that says which rule blocked it (never which keyword matched), plus the channel and upload time to help you decide. **Show title** puts the title on the cover; **Show video** then removes the cover.
 5. When you turn a rule off, or it reaches its end date, covered cards in open tabs are restored right away. A rule with a start date leaves content visible until then (handy for allowing trailers before release) and starts covering on its own when the time comes.
 
 ## Components
@@ -18,16 +18,19 @@ A personal Chrome extension that covers YouTube videos and Instagram posts match
 | `src/shared/normalize.js` | Cleans text so formatting doesn't matter: lowercases it, strips accents and punctuation, collapses spaces. Also defines how one keyword matches against text. |
 | `src/shared/rules.js` | The rule logic: whether a rule is active (on, past its start date, before its end date), which rules match a piece of text, when the next rule starts or ends, and form validation. |
 | `src/shared/storage.js` | Reads and writes your settings in `chrome.storage.local`, on your machine, and notifies the other parts when settings change. |
-| `src/shared/overlay.js` | Puts the cover on a matched card and takes it off again. Blocks clicks and hovers so a covered video can't be opened or start a preview. Holds the two-click "Show anyway" button. |
+| `src/shared/overlay.js` | Puts the cover on a matched card and takes it off again. Shows the blocking rule, channel and upload time. Runs the two-step reveal (title, then video). Blocks clicks and hovers so a covered video can't be opened or start a preview. |
+| `src/shared/details.js` | Small helpers platform files use to pull a card's title, channel and upload time. |
+| `src/shared/rulefile.js` | Reads and writes the plain-text rule file format used for import/export, and merges imported rules into yours. |
 | `src/shared/scanner.js` | The engine. Finds cards on the page, watches for new or changed ones, runs each through the rules, and tells the overlay what to cover. |
-| `src/platforms/youtube.js` | YouTube-specific: the list of element names YouTube uses for video cards. |
-| `src/platforms/instagram.js` | Instagram-specific: how to recognize feed posts and grid tiles. |
+| `src/platforms/youtube.js` | YouTube-specific: the element names YouTube uses for video cards, and where each card keeps its title, channel and upload time. |
+| `src/platforms/instagram.js` | Instagram-specific: how to recognize feed posts and grid tiles, and where a post keeps its caption, author and time. |
 | `src/content/main.js` | The startup script injected into each YouTube/Instagram tab. Picks the right platform, loads your rules, starts the scanner, and re-applies rules when they change, start or end. |
 | `src/content/content.css` | Hides everything inside a covered card and positions the cover. |
 | `src/content/prehide-youtube.css`, `prehide-instagram.css` | Keep cards invisible until they've been checked (prevents a spoiler flash on load). Split per site so each site only evaluates its own selectors. |
-| `src/options/` | The settings page: add, edit, turn on/off, and delete rules; optional start and end dates; global on/off switch. |
+| `src/options/` | The settings page: add, edit, turn on/off, and delete rules; optional start and end dates; import/export rule files; global on/off switch. |
+| `examples/` | Ready-to-import rule files: `avengers-doomsday.txt` and `test-rules.txt` (for running the test checklist). |
 | `src/popup/` | The small window from the toolbar icon: on/off switch, active and upcoming rules, link to settings. |
-| `test/` | Automated tests. `matching.test.js` covers the matching and expiry logic. `scanner.test.js` loads the real content-script files into a simulated page (jsdom) and checks what gets covered. |
+| `test/` | Automated tests. `matching.test.js`: matching and scheduling logic. `rulefile.test.js`: the rule file format. `scanner.test.js`: loads the real content-script files into a simulated page (jsdom) and checks covers, details and reveals. `options.test.js`: the real settings page importing and exporting with an in-memory storage. |
 
 ### Design choices worth knowing
 
@@ -39,7 +42,9 @@ A personal Chrome extension that covers YouTube videos and Instagram posts match
 - **No flash on load.** While at least one rule is active, cards stay invisible until they've been checked. If something breaks, they're un-hidden after 4 seconds so the site never goes blank.
 - **Checked before paint, once per frame.** Page changes are collected by a `MutationObserver` and each affected card is checked at most once per animation frame, just before the browser paints. Background tabs don't run animation frames, so they do no work. A reused card that switches to a different video is checked immediately instead, so a new spoiler thumbnail can't show for even one frame.
 - **No needless re-scans.** Re-applying identical rules is a no-op, and switching to a tab only re-applies rules if a start or end time passed while it was hidden. The cover being added or removed doesn't trigger a re-check of its own card.
-- **Show anyway.** Each cover has a button that reveals that one item: first click arms it ("Click again to show"), a second click within 3 seconds reveals it. The choice is tied to that video or post ID, so it survives small in-place updates like view counts. It is forgotten when the card element is reused for different content or the page reloads.
+- **Two-step reveal.** **Show title** needs a second click within 3 seconds ("Click again to show title"), so a stray click can't spoil anything. The title then appears on the cover while the thumbnail stays hidden. **Show video** removes the cover. Cards where no title can be found get a single **Show anyway** step instead. A revealed item stays revealed for that video or post ID, even through small in-place updates like view counts. The reveal is forgotten when the card element is reused for different content or the page reloads.
+- **Details on the cover.** Channel and upload time are read from the card and shown as plain text. Any part that itself contains a blocked keyword (for example, a channel named after the movie) is left off. Upload times are recognized in YouTube's English wording, long or short ("3 days ago", "3d ago", "2mo ago", "1y ago").
+- **Text extraction.** Card text is read node by node and joined with spaces, so text in neighbouring elements doesn't run together. (`textContent` would turn "12:34" + "Doctor Doom" into "12:34Doctor Doom" and miss the keyword.)
 - **Idle when unused.** With no active rules, the scanner stops watching the page entirely.
 - **Reused cards.** YouTube reuses card elements for different videos, so a card is re-checked whenever its text changes, not just when it's first added.
 - **Safe insertion.** Page text and rule names are only ever inserted as plain text, never as HTML. The overlay lives in a closed shadow root so site styles can't affect it.
@@ -62,12 +67,33 @@ A personal Chrome extension that covers YouTube videos and Instagram posts match
 5. **Navigation without reload.** Click into an unrelated video, then check the recommendations sidebar.
 6. **Turning a rule off.** With the Minecraft search open, turn the rule off in settings. The covers should disappear without a refresh. Turn it back on and they return.
 7. **Start and end dates.** Edit the rule: set **Start blocking** two minutes from now. Results become visible, then get covered on their own at that time. Then set **Stop blocking** two minutes ahead; covers disappear on their own when it passes.
-8. **Show anyway.** Click **Show anyway** on one cover. It should change to "Click again to show" and revert after 3 seconds if you don't click. Click twice to reveal that item only; other covers stay. Reload the page and it's covered again.
+8. **Reveal.** Each cover shows the channel and upload time. Click **Show title**: it changes to "Click again to show title" and reverts after 3 seconds if you don't click again. Click twice: the title appears on the cover, thumbnail still hidden. Click **Show video**: only that item is revealed; other covers stay. Reload the page and it's covered again.
 9. **Global switch.** Use the popup's on/off switch. Everything should restore, then re-cover when you switch it back on.
 10. **Persistence.** Restart Chrome; the rule should still be there.
 11. **Instagram.** Make a rule for a hashtag you follow or that appears in your feed. Check the home feed, a hashtag page, and a profile grid.
 
+12. **Import/export.** Settings → **Share rules** → **Import from file…** and pick `examples/test-rules.txt`. Two rules are added. **Export all rules** downloads a `.txt` you can send to someone else.
+
 For a fuller checklist covering every page type, overlay behaviour and schedules, see `TEST_CASES.md`.
+
+## Rule files
+
+Rules can be shared as plain `.txt` files:
+
+```
+# Lines starting with # are comments.
+[Avengers: Doomsday]
+start: 2026-12-18 19:00
+end: 2027-03-01
+Avengers Doomsday
+Doctor Doom
+```
+
+- `[Name]` starts a rule. Each line under it is one keyword.
+- `start:` and `end:` are optional. Use YYYY-MM-DD, or YYYY-MM-DD HH:MM in 24-hour time. Times are local time on whoever imports the file.
+- `enabled: no` imports the rule switched off.
+
+Importing replaces rules with the same name (ignoring capitals and punctuation) and adds the rest. If the file has any mistake, nothing is imported, and the settings page lists the problems with line numbers.
 
 ## Debugging
 

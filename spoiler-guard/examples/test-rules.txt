@@ -1,0 +1,11 @@
+# Quick rules for running TEST_CASES.md: both match lots of content right now.
+
+[Test MC]
+minecraft
+creeper
+ender dragon
+
+[Test Pasta]
+pasta
+carbonara
+spaghetti

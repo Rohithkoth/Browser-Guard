@@ -1,0 +1,34 @@
+# Lines starting with # are comments.
+# Lines starting with # are comments.
+[Avatar]
+Korra
+Pavi
+Nisha
+Avatar
+Karthik
+Jae
+Seven Havens
+
+[Vision Quest]
+Vision
+Wanda
+Vision Quest
+Ultron
+Tommy
+Agatha
+
+
+
+[Avengers: Doomsday]
+Avengers Doomsday
+Doctor Doom
+Post Credit
+
+[GTA VI]
+GTA 6
+GTA VI
+
+[Pokémon Winds and Waves]
+Browt
+Gequa
+Pombon

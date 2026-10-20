@@ -18,10 +18,39 @@
     'ytd-radio-renderer',                // mix card in search
   ];
 
+  // Where the details shown on a cover live, newest layout first. As with the
+  // card list, update these if the cover stops showing a title or channel.
+  const TITLE_SELECTORS = [
+    '.yt-lockup-metadata-view-model__title',
+    'a#video-title-link',
+    '#video-title',
+    'h3 a[title]',
+    'h3',
+  ];
+  const CHANNEL_SELECTORS = [
+    'ytd-channel-name a',
+    'ytd-channel-name #text',
+    '.yt-content-metadata-view-model__metadata-row:first-child a',
+    '.yt-content-metadata-view-model__metadata-row:first-child .yt-content-metadata-view-model__metadata-text',
+    'a[href^="/@"]:not(:has(img))',
+    'a[href^="/channel/"]:not(:has(img))',
+  ];
+  const AGE_SELECTORS = [
+    '#metadata-line span',
+    '.yt-content-metadata-view-model__metadata-row',
+    '.yt-content-metadata-view-model__metadata-text',
+    'span',
+  ];
+
   SG.platforms = SG.platforms || {};
   SG.platforms.youtube = {
     name: 'youtube',
     matchesHost: (host) => host === 'www.youtube.com' || host === 'youtube.com',
     cardSelector: CARD_SELECTORS.join(', '),
+    getDetails: (card) => ({
+      title: SG.details.firstText(card, TITLE_SELECTORS),
+      channel: SG.details.firstText(card, CHANNEL_SELECTORS),
+      age: SG.details.findAge(card, AGE_SELECTORS),
+    }),
   };
 })(globalThis);

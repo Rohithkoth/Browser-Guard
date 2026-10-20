@@ -11,6 +11,7 @@ const FILES = [
   'src/shared/rules.js',
   'src/shared/overlay.js',
   'src/shared/scanner.js',
+  'src/shared/details.js',
   'src/platforms/youtube.js',
   'src/platforms/instagram.js',
 ].map((f) => fs.readFileSync(path.join(__dirname, '..', f), 'utf8'));
@@ -210,16 +211,30 @@ test('Instagram: the post link inside a feed article is marked checked', () => {
   assert.ok($('#inner-link').hasAttribute('data-sg-checked'));
 });
 
-test('"Show anyway" needs two clicks, then keeps that item visible', async () => {
-  const { apply, $, hostOf } = setup(ytCard('spoiler', 'Avengers Doomsday') + ytCard('other', 'Doctor Doom'));
-  apply([DOOMSDAY]);
-  const button = hostOf($('#spoiler'))._sgButton;
-  assert.ok(button, 'overlay has a Show anyway button');
+// Helpers for the cover's internals (the shadow root is closed, so tests use
+// the handles the overlay keeps on its host element).
+const cover = (h) => h._sg;
+const buttonText = (h) => cover(h).button.textContent;
 
-  button.click();
-  assert.ok($('#spoiler').classList.contains('sg-concealed'), 'first click only arms it');
-  button.click();
-  assert.ok(!$('#spoiler').classList.contains('sg-concealed'), 'second click reveals');
+test('reveal is two steps: title first (with confirm), then the video', async () => {
+  const { apply, $, hostOf } = setup(ytCard('spoiler', 'Avengers Doomsday ending') + ytCard('other', 'Doctor Doom'));
+  apply([DOOMSDAY]);
+  const host = hostOf($('#spoiler'));
+  assert.equal(buttonText(host), 'Show title');
+  assert.equal(cover(host).titleEl.hidden, true);
+
+  cover(host).button.click();
+  assert.equal(buttonText(host), 'Click again to show title');
+  assert.equal(cover(host).titleEl.hidden, true, 'first click only arms it');
+
+  cover(host).button.click();
+  assert.equal(cover(host).titleEl.hidden, false);
+  assert.equal(cover(host).titleEl.textContent, 'Avengers Doomsday ending');
+  assert.ok($('#spoiler').classList.contains('sg-concealed'), 'thumbnail still covered after the title');
+  assert.equal(buttonText(host), 'Show video');
+
+  cover(host).button.click();
+  assert.ok(!$('#spoiler').classList.contains('sg-concealed'));
   assert.equal(hostOf($('#spoiler')), null);
   assert.ok($('#other').classList.contains('sg-concealed'), 'other items stay covered');
 
@@ -231,12 +246,37 @@ test('"Show anyway" needs two clicks, then keeps that item visible', async () =>
   assert.ok(!$('#spoiler').classList.contains('sg-concealed'));
 });
 
+test('the title confirm times out back to "Show title"', async () => {
+  const { apply, $, hostOf } = setup(ytCard('spoiler', 'Avengers Doomsday ending'));
+  apply([DOOMSDAY]);
+  const host = hostOf($('#spoiler'));
+  const realTimeout = host.ownerDocument.defaultView.setTimeout;
+  cover(host).button.click();
+  assert.equal(buttonText(host), 'Click again to show title');
+  await new Promise((r) => realTimeout(r, 3100));
+  assert.equal(buttonText(host), 'Show title');
+  assert.equal(cover(host).titleEl.hidden, true);
+});
+
+test('cards with no title found use a single "Show anyway" step', () => {
+  const { apply, $, hostOf } = setup(
+    '<yt-lockup-view-model id="bare"><a href="/watch?v=1" aria-label="Avengers Doomsday clip"><img src="x.jpg"></a></yt-lockup-view-model>',
+  );
+  apply([DOOMSDAY]);
+  const host = hostOf($('#bare'));
+  assert.equal(buttonText(host), 'Show anyway');
+  cover(host).button.click();
+  cover(host).button.click();
+  assert.ok(!$('#bare').classList.contains('sg-concealed'));
+});
+
 test('"Show anyway" is forgotten when the card is reused for different content', async () => {
   const { apply, $, hostOf } = setup(ytCard('reused', 'Avengers Doomsday trailer'));
   apply([DOOMSDAY]);
-  const button = hostOf($('#reused'))._sgButton;
-  button.click();
-  button.click();
+  const host = hostOf($('#reused'));
+  cover(host).button.click();
+  cover(host).button.click();
+  cover(host).button.click();
   assert.ok(!$('#reused').classList.contains('sg-concealed'));
 
   // YouTube swaps in a different video: new link and new title.
@@ -244,6 +284,86 @@ test('"Show anyway" is forgotten when the card is reused for different content',
   $('#video-title').textContent = 'Avengers Doomsday ending explained';
   await flush();
   assert.ok($('#reused').classList.contains('sg-concealed'));
+  assert.equal(buttonText(hostOf($('#reused'))), 'Show title');
+});
+
+test('a revealed title is not carried over when the card switches to another video', async () => {
+  const { apply, $, hostOf } = setup(ytCard('reused', 'Avengers Doomsday trailer'));
+  apply([DOOMSDAY]);
+  const first = hostOf($('#reused'));
+  cover(first).button.click();
+  cover(first).button.click();
+  assert.equal(cover(first).titleEl.hidden, false);
+
+  $('#thumbnail').setAttribute('href', '/watch?v=different');
+  $('#video-title').textContent = 'Doctor Doom final battle';
+  await flush();
+  const second = hostOf($('#reused'));
+  assert.equal(cover(second).titleEl.hidden, true);
+  assert.equal(buttonText(second), 'Show title');
+});
+
+// Current YouTube layout (lockup view model) with channel and upload time.
+const lockup = (id, title, channel, meta) =>
+  `<ytd-rich-item-renderer id="${id}"><yt-lockup-view-model>` +
+  `<a class="thumb" href="/watch?v=${id}"><img src="t.jpg"></a>` +
+  `<a href="/@${channel.replace(/\s/g, '')}"><img class="avatar" src="a.jpg"></a>` +
+  `<h3 class="yt-lockup-metadata-view-model__title"><a href="/watch?v=${id}" title="${title}"><span>${title}</span></a></h3>` +
+  `<div class="yt-content-metadata-view-model">` +
+  `<div class="yt-content-metadata-view-model__metadata-row"><span class="yt-content-metadata-view-model__metadata-text"><a href="/@x">${channel}</a></span></div>` +
+  `<div class="yt-content-metadata-view-model__metadata-row"><span class="yt-content-metadata-view-model__metadata-text">${meta}</span></div>` +
+  `</div></yt-lockup-view-model></ytd-rich-item-renderer>`;
+
+// Older layout, still used on some pages.
+const classic = (id, title, channel, views, age) =>
+  `<ytd-video-renderer id="${id}"><a id="thumbnail" href="/watch?v=${id}"><img src="t.jpg"></a>` +
+  `<a id="video-title" title="${title}">${title}</a>` +
+  `<ytd-channel-name><div id="text">${channel}</div></ytd-channel-name>` +
+  `<div id="metadata-line"><span>${views}</span><span>${age}</span></div></ytd-video-renderer>`;
+
+test('cover shows channel and upload time (current YouTube layout)', () => {
+  const { apply, $, hostOf } = setup(lockup('v1', 'Avengers Doomsday ending', 'Movie Talk', '1.2M views • 3 days ago'));
+  apply([DOOMSDAY]);
+  const c = cover(hostOf($('#v1')));
+  assert.equal(c.meta.textContent, 'Movie Talk · 3 days ago');
+  assert.equal(c.meta.hidden, false);
+  assert.equal(c.details.title, 'Avengers Doomsday ending');
+});
+
+test('cover shows channel and upload time (older YouTube layout)', () => {
+  const { apply, $, hostOf } = setup(classic('v2', 'Doctor Doom explained', 'Comic Corner', '40K views', 'Streamed 2 weeks ago'));
+  apply([DOOMSDAY]);
+  const c = cover(hostOf($('#v2')));
+  assert.equal(c.meta.textContent, 'Comic Corner · Streamed 2 weeks ago');
+  assert.equal(c.details.title, 'Doctor Doom explained');
+});
+
+test('a channel name containing a blocked keyword is left off the cover', () => {
+  const { apply, $, hostOf } = setup(lockup('v3', 'Ending explained', 'Doctor Doom Fan Club', '9K views • 1 day ago'));
+  apply([DOOMSDAY]);
+  const c = cover(hostOf($('#v3')));
+  assert.equal(c.meta.textContent, '1 day ago');
+  assert.doesNotMatch(c.meta.textContent.toLowerCase(), /doom/);
+});
+
+test('cover without any details found shows no empty detail line', () => {
+  const { apply, $, hostOf } = setup(
+    '<yt-lockup-view-model id="bare"><a href="/watch?v=1" aria-label="Avengers Doomsday clip"><img src="x.jpg"></a></yt-lockup-view-model>',
+  );
+  apply([DOOMSDAY]);
+  assert.equal(cover(hostOf($('#bare'))).meta.hidden, true);
+});
+
+test('Instagram cover shows the author and post time; title is the caption', () => {
+  const { apply, $, hostOf } = setup(
+    '<article id="post"><header><a href="/someuser/"><img alt="someuser profile picture"></a><a href="/someuser/">someuser</a>' +
+    '<time datetime="2026-10-18">2d</time></header><img alt="Photo"><h1>That ending!! #AvengersDoomsday</h1></article>',
+    'instagram',
+  );
+  apply([DOOMSDAY]);
+  const c = cover(hostOf($('#post')));
+  assert.equal(c.meta.textContent, 'someuser · 2d');
+  assert.equal(c.details.title, 'That ending!! #AvengersDoomsday');
 });
 
 test('"Show anyway" clicks never reach the hidden item', () => {
@@ -251,7 +371,7 @@ test('"Show anyway" clicks never reach the hidden item', () => {
   apply([DOOMSDAY]);
   let reached = 0;
   $('#spoiler').addEventListener('click', () => reached++);
-  hostOf($('#spoiler'))._sgButton.click();
+  hostOf($('#spoiler'))._sg.button.click();
   assert.equal(reached, 0);
 });
 
@@ -263,4 +383,41 @@ test('scheduled rule leaves trailers visible, then covers them once it starts', 
   assert.ok(!$('#trailer').classList.contains('sg-concealed'));
   scanner.setRules(SG.compileRules([scheduled], release));
   assert.ok($('#trailer').classList.contains('sg-concealed'));
+});
+
+// Regression: textContent glued adjacent elements ("12:34" + "Doctor Doom" ->
+// "12:34Doctor Doom"), hiding keywords at the start of a block. YouTube's
+// newer layout has no whitespace between elements, so this happened for real.
+test('keywords right after another element are still matched', () => {
+  const { apply, $ } = setup(
+    '<yt-lockup-view-model id="glued"><a href="/watch?v=1"><span>12:34</span></a><h3>Doctor Doom final fight</h3></yt-lockup-view-model>' +
+    '<yt-lockup-view-model id="glued2"><h3>Ending explained</h3><span>Doctor Doom Fan Club</span></yt-lockup-view-model>',
+  );
+  apply([DOOMSDAY]);
+  assert.ok($('#glued').classList.contains('sg-concealed'));
+  assert.ok($('#glued2').classList.contains('sg-concealed'));
+});
+
+test('upload time is recognized in long and short forms', () => {
+  const cases = [
+    ['1.2M views • 3 days ago', '3 days ago'],
+    ['1.2M views • 3d ago', '3d ago'],
+    ['40K views • 5h ago', '5h ago'],
+    ['900 views • 2mo ago', '2mo ago'],
+    ['12M views • 1y ago', '1y ago'],
+    ['3K views • 2w ago', '2w ago'],
+    ['88 views • 45m ago', '45m ago'],
+    ['Streamed 2 weeks ago', 'Streamed 2 weeks ago'],
+  ];
+  for (const [meta, expected] of cases) {
+    const { apply, $, hostOf } = setup(lockup('v', 'Avengers Doomsday clip', 'Movie Talk', meta));
+    apply([DOOMSDAY]);
+    assert.equal(cover(hostOf($('#v'))).meta.textContent, `Movie Talk · ${expected}`, meta);
+  }
+});
+
+test('view counts are not mistaken for an upload time', () => {
+  const { apply, $, hostOf } = setup(lockup('v', 'Avengers Doomsday clip', 'Movie Talk', '1.2M views'));
+  apply([DOOMSDAY]);
+  assert.equal(cover(hostOf($('#v'))).meta.textContent, 'Movie Talk');
 });
