@@ -49,6 +49,31 @@
     </section>
 
     <section class="card">
+      <h2>Share rules</h2>
+      <p class="hint">Import rules from a .txt file, or export yours to share. Imported rules replace rules with the same name and are added otherwise.</p>
+      <div class="row">
+        <button type="button" id="import-button">Import from file…</button>
+        <input type="file" id="import-file" accept=".txt,text/plain" hidden>
+        <button type="button" class="ghost" id="export-button">Export all rules</button>
+      </div>
+      <p class="messages" id="share-messages" role="status"></p>
+      <details class="format-help">
+        <summary>File format</summary>
+        <pre># Lines starting with # are comments.
+[Avengers: Doomsday]
+start: 2026-12-18 19:00
+end: 2027-03-01
+Avengers Doomsday
+Doctor Doom
+
+[GTA VI]
+GTA 6
+GTA VI</pre>
+        <p class="hint"><code>[Name]</code> starts a rule; each line under it is a keyword. <code>start:</code> and <code>end:</code> are optional (YYYY-MM-DD, or YYYY-MM-DD HH:MM in 24-hour time, in your local time). <code>enabled: no</code> imports a rule switched off.</p>
+      </details>
+    </section>
+
+    <section class="card">
       <h2>Rules</h2>
       <p class="empty" id="empty-state">No rules yet. Add one above.</p>
       <ul class="rule-list" id="rule-list"></ul>
@@ -57,6 +82,7 @@
   <script src="../shared/normalize.js"></script>
   <script src="../shared/rules.js"></script>
   <script src="../shared/storage.js"></script>
+  <script src="../shared/rulefile.js"></script>
   <script src="options.js"></script>
 </body>
 </html>

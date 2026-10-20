@@ -1,0 +1,19 @@
+# Spoiler Guard rules
+# Import from the settings page: Share rules -> Import from file.
+# Add a "start: YYYY-MM-DD HH:MM" line under the name to allow trailers until release.
+
+[Avengers: Doomsday]
+Avengers: Doomsday
+Avengers Doomsday
+Avengers 5
+Doctor Doom
+Victor Von Doom
+Dr Doom
+Doomsday trailer
+Doomsday spoilers
+Doomsday ending
+Doomsday leak
+Doomsday post credits
+Doomsday cameo
+Marvel Doomsday
+MCU Doomsday

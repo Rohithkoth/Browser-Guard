@@ -4,7 +4,7 @@
   const CONCEALED_CLASS = 'sg-concealed';
   const RELATIVE_CLASS = 'sg-relative';
   const HOST_CLASS = 'sg-overlay-host';
-  // How long the "Click again to show" confirmation stays armed.
+  // How long the "Click again to show title" confirmation stays armed.
   const CONFIRM_MS = 3000;
 
   // Events stopped at the overlay so the hidden item can't be opened, hovered
@@ -14,7 +14,7 @@
     'mouseover', 'mouseenter', 'pointerover', 'pointerenter', 'touchstart', 'touchend',
   ];
   // Cancelling touch events would also cancel the click that touch screens
-  // synthesize, which would make the "Show anyway" button unusable by touch.
+  // synthesize, which would make the reveal button unusable by touch.
   const NO_PREVENT_DEFAULT = new Set(['touchstart', 'touchend']);
 
   // Lives in a shadow root so site CSS can't restyle or reveal it.
@@ -23,16 +23,21 @@
     .box {
       position: absolute; inset: 0; z-index: 2147483000;
       display: flex; flex-direction: column; align-items: center; justify-content: center;
-      gap: 4px; padding: 8px; box-sizing: border-box; overflow: hidden;
+      gap: 3px; padding: 6px 10px; box-sizing: border-box; overflow: hidden;
       background: #16161a; color: #f2f2f2; border-radius: inherit;
       font: 500 12px/1.35 system-ui, -apple-system, "Segoe UI", sans-serif;
       text-align: center; cursor: default; user-select: none;
     }
-    .title { font-weight: 700; font-size: 13px; letter-spacing: .02em; }
-    .rules { opacity: .85; max-width: 100%; overflow-wrap: anywhere;
-      display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+    .brand { font-size: 10px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; opacity: .55; }
+    .rules, .meta, .shown-title { max-width: 100%; overflow-wrap: anywhere; overflow: hidden;
+      display: -webkit-box; -webkit-box-orient: vertical; }
+    .rules { font-weight: 700; -webkit-line-clamp: 2; }
+    .meta { font-size: 11px; opacity: .75; -webkit-line-clamp: 1; }
+    .shown-title { font-size: 12px; -webkit-line-clamp: 3; padding: 4px 6px; border-radius: 6px;
+      background: #26262d; user-select: text; }
+    [hidden] { display: none !important; }
     button {
-      margin-top: 4px; padding: 4px 10px; border-radius: 999px; cursor: pointer;
+      margin-top: 3px; padding: 4px 10px; border-radius: 999px; cursor: pointer;
       font: 600 11px/1.3 system-ui, -apple-system, "Segoe UI", sans-serif;
       color: #f2f2f2; background: transparent; border: 1px solid #5a5a66;
     }
@@ -55,51 +60,85 @@
     return null;
   }
 
-  // Two clicks are needed so a stray click can't reveal a spoiler: the first
-  // arms the button, the second (within CONFIRM_MS) reveals the item.
-  function buildRevealButton(onReveal) {
-    const button = document.createElement('button');
-    button.type = 'button';
+  function make(tag, className, text) {
+    const el = document.createElement(tag);
+    if (className) el.className = className;
+    if (text) el.textContent = text;
+    return el;
+  }
+
+  // Reveal happens in two steps so you can decide with more information:
+  //   1. "Show title" (needs a second click within CONFIRM_MS, so a stray click
+  //      can't spoil anything) puts the title on the cover; the thumbnail stays hidden.
+  //   2. "Show video" removes the cover.
+  // Cards with no title found skip step 1: "Show anyway" + confirm reveals everything.
+  function wireButton(host, onReveal) {
+    const button = host._sg.button;
+    let armed = false;
     let timer = null;
-    const disarm = () => {
+
+    function render() {
+      const state = host._sg;
+      const confirming = armed;
+      button.classList.toggle('confirm', confirming);
+      if (state.stage === 'title-shown') button.textContent = 'Show video';
+      else if (state.details.title) button.textContent = confirming ? 'Click again to show title' : 'Show title';
+      else button.textContent = confirming ? 'Click again to show' : 'Show anyway';
+    }
+
+    function disarm() {
       clearTimeout(timer);
       timer = null;
-      button.textContent = 'Show anyway';
-      button.classList.remove('confirm');
-    };
+      armed = false;
+      render();
+    }
+
     button.addEventListener('click', () => {
-      if (timer === null) {
-        button.textContent = 'Click again to show';
-        button.classList.add('confirm');
+      const state = host._sg;
+      if (state.stage === 'title-shown') {
+        onReveal();
+        return;
+      }
+      if (!armed) {
+        armed = true;
         timer = setTimeout(disarm, CONFIRM_MS);
+        render();
+        return;
+      }
+      disarm();
+      if (state.details.title) {
+        state.stage = 'title-shown';
+        state.titleEl.textContent = state.details.title;
+        state.titleEl.hidden = false;
+        render();
       } else {
-        disarm();
         onReveal();
       }
     });
-    disarm();
-    return button;
+    host._sg.render = render;
+    render();
   }
 
-  function buildHost(rules, onReveal) {
+  function buildHost(rules, details, onReveal) {
     const host = document.createElement('div');
     host.className = HOST_CLASS;
     host.setAttribute('role', 'group');
     const shadow = host.attachShadow({ mode: 'closed' });
 
-    const style = document.createElement('style');
+    const style = make('style');
     style.textContent = OVERLAY_CSS;
-    const box = document.createElement('div');
-    box.className = 'box';
-    const title = document.createElement('div');
-    title.className = 'title';
-    title.textContent = 'Spoiler Guard';
-    const names = document.createElement('div');
-    names.className = 'rules';
-    box.append(title, names);
+    const box = make('div', 'box');
+    const names = make('div', 'rules');
+    const meta = make('div', 'meta');
+    const titleEl = make('div', 'shown-title');
+    titleEl.hidden = true;
+    box.append(make('div', 'brand', 'Spoiler Guard'), names, meta, titleEl);
+
+    host._sg = { names, meta, titleEl, stage: 'covered', details: {}, button: null, render: () => {} };
     if (onReveal) {
-      host._sgButton = buildRevealButton(onReveal);
-      box.append(host._sgButton);
+      host._sg.button = make('button');
+      host._sg.button.type = 'button';
+      box.append(host._sg.button);
     }
     shadow.append(style, box);
 
@@ -110,31 +149,41 @@
       });
     }
 
-    host._sgNames = names;
-    updateHost(host, rules);
+    updateHost(host, rules, details);
+    if (onReveal) wireButton(host, onReveal);
     return host;
   }
 
-  function updateHost(host, rules) {
-    // textContent only: rule names are shown as plain text, never parsed as HTML.
-    host._sgNames.textContent = 'Blocked: ' + rules.map((r) => r.name).join(', ');
+  // textContent only: rule names, channel names and titles are shown as plain
+  // text, never parsed as HTML.
+  function updateHost(host, rules, details) {
+    const state = host._sg;
+    state.details = details || {};
+    state.names.textContent = 'Blocked: ' + rules.map((r) => r.name).join(', ');
+    const meta = [state.details.channel, state.details.age].filter(Boolean).join(' · ');
+    state.meta.textContent = meta;
+    state.meta.hidden = !meta;
+    if (state.stage === 'title-shown') state.titleEl.textContent = state.details.title || '';
     host.setAttribute('aria-label', describe(rules));
     host.title = describe(rules);
     host.dataset.sgRules = ruleKey(rules);
+    state.render();
   }
 
-  // onReveal is optional; when given, the overlay shows a "Show anyway" button.
-  function conceal(card, rules, onReveal) {
+  // options: { details: { title, channel, age }, onReveal }. Without onReveal
+  // the cover has no reveal button.
+  function conceal(card, rules, options) {
+    const { details = {}, onReveal = null } = options || {};
     let host = findHost(card);
     if (host) {
-      if (host.dataset.sgRules !== ruleKey(rules)) updateHost(host, rules);
+      updateHost(host, rules, details);
     } else {
       // Only cards that aren't already positioned get position: relative, so
       // absolutely positioned tiles keep their layout.
       if (!card.classList.contains(RELATIVE_CLASS) && getComputedStyle(card).position === 'static') {
         card.classList.add(RELATIVE_CLASS);
       }
-      host = buildHost(rules, onReveal);
+      host = buildHost(rules, details, onReveal);
       card.prepend(host);
     }
     card.classList.add(CONCEALED_CLASS);
@@ -150,5 +199,5 @@
     return card.classList.contains(CONCEALED_CLASS);
   }
 
-  SG.overlay = { conceal, reveal, isConcealed, HOST_CLASS, CONCEALED_CLASS };
+  SG.overlay = { conceal, reveal, isConcealed, findHost, HOST_CLASS, CONCEALED_CLASS };
 })(globalThis);

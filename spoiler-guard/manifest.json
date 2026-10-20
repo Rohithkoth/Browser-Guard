@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Spoiler Guard",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Covers YouTube videos and Instagram posts that match your spoiler rules.",
   "permissions": [
     "storage"
@@ -22,6 +22,7 @@
         "src/shared/storage.js",
         "src/shared/overlay.js",
         "src/shared/scanner.js",
+        "src/shared/details.js",
         "src/platforms/youtube.js",
         "src/platforms/instagram.js",
         "src/content/main.js"
@@ -42,6 +43,7 @@
         "src/shared/storage.js",
         "src/shared/overlay.js",
         "src/shared/scanner.js",
+        "src/shared/details.js",
         "src/platforms/youtube.js",
         "src/platforms/instagram.js",
         "src/content/main.js"

@@ -66,10 +66,11 @@ With rule `Test MC` active (`minecraft`):
 | E1 | Hover over a covered video for 5 seconds. | No hover preview plays, no audio, nothing revealed. |
 | E2 | Click on a covered video (not on the button). | Nothing happens; you stay on the page. |
 | E3 | Middle-click or Ctrl+click a covered video. | No new tab opens. |
-| E4 | Click **Show anyway** once, then wait. | Button changes to "Click again to show", reverts after ~3 seconds; still covered. |
-| E5 | Click **Show anyway** twice quickly. | Only that video is revealed; others stay covered. |
-| E6 | After E5, scroll away and back. | The revealed video stays revealed. |
-| E7 | After E5, reload the page. | It's covered again. |
+| E4 | Look at a cover. | Shows "Blocked: <rule>", then the channel and upload time (e.g. "Movie Talk · 3 days ago"). No title, no thumbnail. |
+| E5 | Click **Show title** once, then wait. | Button changes to "Click again to show title", reverts after ~3 seconds; nothing shown. |
+| E6 | Click **Show title** twice quickly. | The title appears on the cover; the thumbnail is still hidden; button now says **Show video**. |
+| E7 | Click **Show video**. | Only that video is revealed; others stay covered. Scroll away and back: still revealed. Reload: covered again. |
+| E7b | Rule keyword matches a channel name (e.g. keyword = a channel you know). | That channel's covers show only the upload time, not the channel name. |
 | E8 | Resize the window narrow, then wide. | Covers stay aligned with their cards; no thumbnail edges peek out. |
 
 ## F. Turning blocking off and on
@@ -104,6 +105,17 @@ Pick a hashtag or word that is in your feed today (for example, a show or a team
 | H4 | A profile grid | Tiles covered only when the image description includes the keyword. Note how many get missed. |
 | H5 | Open a covered post's link directly (paste its URL) | The post dialog/page is covered. |
 | H6 | Scroll the feed for a while | New posts are covered as they load. |
+
+## J. Import and export
+
+| ID | Steps | Expected |
+|---|---|---|
+| J1 | Settings → Share rules → **Import from file…** → `examples/test-rules.txt`. | Confirmation lists "Test MC" and "Test Pasta". After OK: "2 added, 0 updated"; both rules appear and work on YouTube. |
+| J2 | Import the same file again. | "0 added, 2 updated"; no duplicates. |
+| J3 | **Export all rules**, open the downloaded file in Notepad. | Readable: `[Name]` lines, keywords, `start:`/`end:` lines where set. |
+| J4 | Edit the exported file in Notepad: change a keyword, save, import it. | Rule updated with the new keyword. |
+| J5 | Make a file whose first line is a keyword with no `[Name]` above it, import it. | "Nothing was imported", with the line number of the problem. No rules changed. |
+| J6 | Import `examples/avengers-doomsday.txt`. | Adds the Avengers: Doomsday rule. |
 
 ## I. Not broken elsewhere
 

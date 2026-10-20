@@ -8,7 +8,7 @@ const { JSDOM } = require('jsdom');
 const scannerPath = process.env.SCANNER || path.join(__dirname, '..', 'src/shared/scanner.js');
 const FILES = ['src/shared/normalize.js', 'src/shared/rules.js', 'src/shared/overlay.js']
   .map((f) => path.join(__dirname, '..', f))
-  .concat([scannerPath, path.join(__dirname, '..', 'src/platforms/youtube.js')])
+  .concat([scannerPath, path.join(__dirname, '..', 'src/shared/details.js'), path.join(__dirname, '..', 'src/platforms/youtube.js')])
   .map((f) => fs.readFileSync(f, 'utf8'));
 
 const card = (i, title) =>
