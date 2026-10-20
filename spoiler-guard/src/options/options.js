@@ -5,6 +5,7 @@
   const form = $('rule-form');
   const nameInput = $('rule-name');
   const keywordsInput = $('rule-keywords');
+  const startsInput = $('rule-starts');
   const expiresInput = $('rule-expires');
   const messages = $('form-messages');
   const list = $('rule-list');
@@ -50,6 +51,7 @@
     editingId = rule.id;
     nameInput.value = rule.name;
     keywordsInput.value = rule.keywords.join('\n');
+    startsInput.value = toLocalInput(rule.startsAt);
     expiresInput.value = toLocalInput(rule.expiresAt);
     $('form-title').textContent = 'Edit rule';
     $('save-rule').textContent = 'Save changes';
@@ -67,9 +69,13 @@
 
   function statusLabel(rule, now) {
     const status = SG.ruleStatus(rule, now);
-    if (status === 'expired') return 'Expired';
+    const fmt = (ms) => new Date(ms).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
     if (status === 'disabled') return 'Off';
-    if (rule.expiresAt != null) return 'Active until ' + new Date(rule.expiresAt).toLocaleString();
+    if (status === 'expired') return 'Ended ' + fmt(rule.expiresAt);
+    if (status === 'scheduled') {
+      return 'Starts ' + fmt(rule.startsAt) + (rule.expiresAt != null ? ', ends ' + fmt(rule.expiresAt) : '');
+    }
+    if (rule.expiresAt != null) return 'Active until ' + fmt(rule.expiresAt);
     return 'Active';
   }
 
@@ -115,6 +121,7 @@
       {
         name: nameInput.value,
         keywords: keywordsInput.value.split('\n'),
+        startsAt: fromLocalInput(startsInput.value),
         expiresAt: fromLocalInput(expiresInput.value),
       },
       now,
@@ -136,6 +143,7 @@
     resetForm();
     showMessages([], []);
   });
+  $('clear-starts').addEventListener('click', () => (startsInput.value = ''));
   $('clear-expires').addEventListener('click', () => (expiresInput.value = ''));
   $('global-enabled').addEventListener('change', (e) => SG.setEnabled(e.target.checked));
 
@@ -147,7 +155,7 @@
     render();
   });
 
-  // Re-render each minute so "Active" flips to "Expired" without a reload.
+  // Re-render each minute so statuses flip (Starts → Active → Ended) without a reload.
   setInterval(render, 60 * 1000);
 
   SG.loadSettings().then((settings) => {

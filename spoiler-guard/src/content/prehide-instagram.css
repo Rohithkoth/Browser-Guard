@@ -1,0 +1,9 @@
+/* Pre-hide on Instagram: posts and grid tiles stay invisible until checked.
+   Only active while at least one rule is active. */
+html.sg-armed :is(
+  article,
+  a[href*="/p/"],
+  a[href*="/reel/"]
+):not([data-sg-checked]) {
+  visibility: hidden !important;
+}

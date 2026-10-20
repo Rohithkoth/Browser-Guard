@@ -21,16 +21,41 @@
     return parts.join(' \n ');
   }
 
+  // Which video or post a card is showing, from its link: /watch?v=ID,
+  // /shorts/ID, /p/ID or /reel/ID. One querySelector, so it's cheap enough to
+  // run on every change, unlike reading the card's full text.
+  const CONTENT_ID = /(?:[?&]v=|\/shorts\/|\/p\/|\/reel\/)([\w-]+)/;
+  const CONTENT_LINK = 'a[href*="v="], a[href*="/shorts/"], a[href*="/p/"], a[href*="/reel/"]';
+
+  function contentId(card) {
+    const link = card.tagName === 'A' ? card : card.querySelector(CONTENT_LINK);
+    const m = link && CONTENT_ID.exec(link.getAttribute('href') || '');
+    return m ? m[1] : '';
+  }
+
+  function isOverlayHost(node) {
+    return node.nodeType === 1 && node.classList.contains(SG.overlay.HOST_CLASS);
+  }
+
   // adapter: { name, cardSelector, getText?(card) }
   function createScanner(adapter, doc) {
     doc = doc || root.document;
+    const win = doc.defaultView || root;
     const getText = adapter.getText || collectText;
     let compiled = [];
+    let rulesSignature = '';
     let generation = 0;
     let observer = null;
-    // Last text and rule generation seen per card. YouTube reuses card elements
-    // for different videos, so a card is re-checked whenever its text changes.
+    // Per card: the text and content id last checked, and the rule generation.
+    // YouTube reuses card elements for different videos, so a card is re-checked
+    // whenever its text changes, not just when it's first added.
     const seen = new WeakMap();
+    // Cards you chose to "Show anyway", keyed to the video/post they showed. The
+    // choice lasts until the card shows a different video or post, or the page reloads.
+    const shownAnyway = new WeakMap();
+    // Cards waiting to be checked in the next animation frame.
+    const pending = new Set();
+    let frameRequested = false;
 
     function outermostCard(el) {
       // Some sites nest card elements (e.g. a lockup inside a grid item). Only
@@ -50,11 +75,20 @@
         const text = getText(card);
         const prev = seen.get(card);
         if (prev && prev.text === text && prev.generation === generation) return;
-        seen.set(card, { text, generation });
+        const id = contentId(card) || SG.normalize(text);
+        seen.set(card, { text, id, generation });
 
-        const hits = compiled.length ? SG.matchText(text, compiled) : [];
-        if (hits.length) SG.overlay.conceal(card, hits);
-        else if (SG.overlay.isConcealed(card)) SG.overlay.reveal(card);
+        if (shownAnyway.has(card) && shownAnyway.get(card) !== id) shownAnyway.delete(card);
+
+        const hits = compiled.length && !shownAnyway.has(card) ? SG.matchText(text, compiled) : [];
+        if (hits.length) {
+          SG.overlay.conceal(card, hits, () => {
+            shownAnyway.set(card, seen.get(card).id);
+            SG.overlay.reveal(card);
+          });
+        } else if (SG.overlay.isConcealed(card)) {
+          SG.overlay.reveal(card);
+        }
       } catch (err) {
         console.warn('[Spoiler Guard] failed to check an item', err);
       } finally {
@@ -78,13 +112,14 @@
         if (m.type === 'characterData') {
           add(m.target.parentElement);
         } else if (m.type === 'attributes') {
-          if (m.target.classList && m.target.classList.contains(SG.overlay.HOST_CLASS)) continue;
-          add(m.target);
+          if (!isOverlayHost(m.target)) add(m.target);
         } else {
+          // Our own overlay being added or removed isn't a content change.
+          const nodes = [...m.addedNodes, ...m.removedNodes];
+          if (nodes.length && nodes.every(isOverlayHost)) continue;
           if (m.target.nodeType === 1) add(m.target);
           for (const node of m.addedNodes) {
-            if (node.nodeType !== 1) continue;
-            if (node.classList.contains(SG.overlay.HOST_CLASS)) continue;
+            if (node.nodeType !== 1 || isOverlayHost(node)) continue;
             add(node);
             for (const inner of node.querySelectorAll(adapter.cardSelector)) add(inner);
           }
@@ -93,10 +128,34 @@
       return cards;
     }
 
-    // MutationObserver callbacks run before the browser paints, so new or
-    // changed cards are checked before they first appear on screen.
+    // Checks are batched to once per card per frame. Animation frames run just
+    // before the browser paints, so a card is still checked before it's shown,
+    // and they pause in background tabs, so hidden tabs do no work at all.
+    function flush() {
+      frameRequested = false;
+      const cards = [...pending];
+      pending.clear();
+      for (const card of cards) if (card.isConnected) processCard(card);
+    }
+
+    function schedule(card) {
+      pending.add(card);
+      if (!frameRequested) {
+        frameRequested = true;
+        (win.requestAnimationFrame || win.setTimeout).call(win, flush);
+      }
+    }
+
     function onMutations(mutations) {
-      for (const card of collectCards(mutations)) processCard(card);
+      for (const card of collectCards(mutations)) {
+        const prev = seen.get(card);
+        // A checked card that now shows a different video (YouTube reusing the
+        // element) is re-checked right away, so the new thumbnail can't show for
+        // even one frame. New cards are kept hidden by the pre-hide CSS until
+        // checked, and other changes can wait for the next frame.
+        if (prev && prev.id !== (contentId(card) || prev.id)) processCard(card);
+        else schedule(card);
+      }
     }
 
     function scanAll() {
@@ -120,10 +179,20 @@
     function stopObserving() {
       if (observer) observer.disconnect();
       observer = null;
+      pending.clear();
     }
 
-    // Called on startup and whenever rules change, are toggled, or expire.
+    function signatureOf(rules) {
+      return JSON.stringify(rules.map((r) => [r.id, r.name, r.matchers]));
+    }
+
+    // Called on startup and whenever rules change, are toggled, start or end.
     function setRules(compiledRules) {
+      const signature = signatureOf(compiledRules);
+      // Same rules as before: every card's result would be identical, so skip
+      // the full re-scan.
+      if (signature === rulesSignature && (observer || !compiledRules.length)) return;
+      rulesSignature = signature;
       compiled = compiledRules;
       generation++;
       if (compiled.length) {

@@ -40,4 +40,5 @@ small { color: var(--muted); font-weight: 400; }
 .rule-main strong { overflow-wrap: anywhere; }
 .meta { color: var(--muted); font-size: 12px; }
 .rule.disabled, .rule.expired { opacity: .6; }
+.rule.scheduled { border-left: 3px dashed var(--muted); }
 .rule.active { border-left: 3px solid var(--accent); }
