@@ -1,9 +1,11 @@
 {
   "manifest_version": 3,
   "name": "Spoiler Guard",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Covers YouTube videos and Instagram posts that match your spoiler rules.",
-  "permissions": ["storage"],
+  "permissions": [
+    "storage"
+  ],
   "action": {
     "default_title": "Spoiler Guard",
     "default_popup": "src/popup/popup.html"
@@ -11,7 +13,9 @@
   "options_page": "src/options/options.html",
   "content_scripts": [
     {
-      "matches": ["https://www.youtube.com/*", "https://www.instagram.com/*"],
+      "matches": [
+        "https://www.youtube.com/*"
+      ],
       "js": [
         "src/shared/normalize.js",
         "src/shared/rules.js",
@@ -22,7 +26,30 @@
         "src/platforms/instagram.js",
         "src/content/main.js"
       ],
-      "css": ["src/content/content.css"],
+      "css": [
+        "src/content/content.css",
+        "src/content/prehide-youtube.css"
+      ],
+      "run_at": "document_start"
+    },
+    {
+      "matches": [
+        "https://www.instagram.com/*"
+      ],
+      "js": [
+        "src/shared/normalize.js",
+        "src/shared/rules.js",
+        "src/shared/storage.js",
+        "src/shared/overlay.js",
+        "src/shared/scanner.js",
+        "src/platforms/youtube.js",
+        "src/platforms/instagram.js",
+        "src/content/main.js"
+      ],
+      "css": [
+        "src/content/content.css",
+        "src/content/prehide-instagram.css"
+      ],
       "run_at": "document_start"
     }
   ],

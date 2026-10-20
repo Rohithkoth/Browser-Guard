@@ -8,7 +8,7 @@ A personal Chrome extension that covers YouTube videos and Instagram posts match
 2. On YouTube and Instagram, the extension watches the page for video cards and posts, including ones that load as you scroll.
 3. It reads each card's text (title, caption, hashtags, accessibility labels, image descriptions) and checks it against your active rules.
 4. A matching card gets an opaque cover that says which rule blocked it, never which keyword matched.
-5. When you turn a rule off, or it expires, covered cards in open tabs are restored right away.
+5. When you turn a rule off, or it reaches its end date, covered cards in open tabs are restored right away. A rule with a start date leaves content visible until then (handy for allowing trailers before release) and starts covering on its own when the time comes.
 
 ## Components
 
@@ -16,26 +16,30 @@ A personal Chrome extension that covers YouTube videos and Instagram posts match
 |---|---|
 | `manifest.json` | Tells Chrome what the extension is: which sites it runs on (YouTube, Instagram), which files to inject, and which permission it needs (`storage` only). |
 | `src/shared/normalize.js` | Cleans text so formatting doesn't matter: lowercases it, strips accents and punctuation, collapses spaces. Also defines how one keyword matches against text. |
-| `src/shared/rules.js` | The rule logic: whether a rule is active (on and not expired), which rules match a piece of text, when the next rule expires, and form validation. |
+| `src/shared/rules.js` | The rule logic: whether a rule is active (on, past its start date, before its end date), which rules match a piece of text, when the next rule starts or ends, and form validation. |
 | `src/shared/storage.js` | Reads and writes your settings in `chrome.storage.local`, on your machine, and notifies the other parts when settings change. |
-| `src/shared/overlay.js` | Puts the cover on a matched card and takes it off again. Also blocks clicks and hovers so a covered video can't be opened or start a preview. |
+| `src/shared/overlay.js` | Puts the cover on a matched card and takes it off again. Blocks clicks and hovers so a covered video can't be opened or start a preview. Holds the two-click "Show anyway" button. |
 | `src/shared/scanner.js` | The engine. Finds cards on the page, watches for new or changed ones, runs each through the rules, and tells the overlay what to cover. |
 | `src/platforms/youtube.js` | YouTube-specific: the list of element names YouTube uses for video cards. |
 | `src/platforms/instagram.js` | Instagram-specific: how to recognize feed posts and grid tiles. |
-| `src/content/main.js` | The startup script injected into each YouTube/Instagram tab. Picks the right platform, loads your rules, starts the scanner, and re-applies rules when they change or expire. |
-| `src/content/content.css` | Hides cards until they've been checked (prevents a spoiler flash on load) and hides everything inside a covered card. |
-| `src/options/` | The settings page: add, edit, turn on/off, and delete rules; set expirations; global on/off switch. |
-| `src/popup/` | The small window from the toolbar icon: on/off switch, list of active rules, link to settings. |
+| `src/content/main.js` | The startup script injected into each YouTube/Instagram tab. Picks the right platform, loads your rules, starts the scanner, and re-applies rules when they change, start or end. |
+| `src/content/content.css` | Hides everything inside a covered card and positions the cover. |
+| `src/content/prehide-youtube.css`, `prehide-instagram.css` | Keep cards invisible until they've been checked (prevents a spoiler flash on load). Split per site so each site only evaluates its own selectors. |
+| `src/options/` | The settings page: add, edit, turn on/off, and delete rules; optional start and end dates; global on/off switch. |
+| `src/popup/` | The small window from the toolbar icon: on/off switch, active and upcoming rules, link to settings. |
 | `test/` | Automated tests. `matching.test.js` covers the matching and expiry logic. `scanner.test.js` loads the real content-script files into a simulated page (jsdom) and checks what gets covered. |
 
 ### Design choices worth knowing
 
-- **One definition of "active".** `isRuleActive()` is the only place that decides whether a rule applies. An expired rule therefore behaves exactly like a manually disabled one.
+- **One definition of "active".** `isRuleActive()` is the only place that decides whether a rule applies. Not-started-yet, ended, and manually turned off all behave identically.
+- **Start and end dates.** Both are optional. Blocking begins exactly at the start time and stops exactly at the end time. Open tabs set a timer for the next start or end, so covers appear or disappear without a refresh.
 - **Whole-word matching.** Keyword `thor` matches "Thor returns" and "Thor's hammer", but not "thorough".
 - **Hashtags.** Multi-word keywords also match their joined-up hashtag form: `Avengers Doomsday` matches `#AvengersDoomsday` and `#AvengersDoomsdaySpoilers`. Single words don't get this, to avoid false positives.
 - **Keywords are never shown on the page.** The overlay shows only rule names. The settings list shows only how many keywords a rule has; the keywords appear only when you open the rule to edit it.
 - **No flash on load.** While at least one rule is active, cards stay invisible until they've been checked. If something breaks, they're un-hidden after 4 seconds so the site never goes blank.
-- **Checked before paint.** New and changed cards are checked from a `MutationObserver`, whose callbacks run before the browser paints, so they're covered before they appear.
+- **Checked before paint, once per frame.** Page changes are collected by a `MutationObserver` and each affected card is checked at most once per animation frame, just before the browser paints. Background tabs don't run animation frames, so they do no work. A reused card that switches to a different video is checked immediately instead, so a new spoiler thumbnail can't show for even one frame.
+- **No needless re-scans.** Re-applying identical rules is a no-op, and switching to a tab only re-applies rules if a start or end time passed while it was hidden. The cover being added or removed doesn't trigger a re-check of its own card.
+- **Show anyway.** Each cover has a button that reveals that one item: first click arms it ("Click again to show"), a second click within 3 seconds reveals it. The choice is tied to that video or post ID, so it survives small in-place updates like view counts. It is forgotten when the card element is reused for different content or the page reloads.
 - **Idle when unused.** With no active rules, the scanner stops watching the page entirely.
 - **Reused cards.** YouTube reuses card elements for different videos, so a card is re-checked whenever its text changes, not just when it's first added.
 - **Safe insertion.** Page text and rule names are only ever inserted as plain text, never as HTML. The overlay lives in a closed shadow root so site styles can't affect it.
@@ -57,10 +61,13 @@ A personal Chrome extension that covers YouTube videos and Instagram posts match
 4. **Dynamic content.** On the Minecraft search, scroll down several pages. New results should arrive already covered.
 5. **Navigation without reload.** Click into an unrelated video, then check the recommendations sidebar.
 6. **Turning a rule off.** With the Minecraft search open, turn the rule off in settings. The covers should disappear without a refresh. Turn it back on and they return.
-7. **Expiry.** Edit the rule and set it to expire two minutes from now. When it passes, covers disappear on their own.
-8. **Global switch.** Use the popup's on/off switch. Everything should restore, then re-cover when you switch it back on.
-9. **Persistence.** Restart Chrome; the rule should still be there.
-10. **Instagram.** Make a rule for a hashtag you follow or that appears in your feed. Check the home feed, a hashtag page, and a profile grid.
+7. **Start and end dates.** Edit the rule: set **Start blocking** two minutes from now. Results become visible, then get covered on their own at that time. Then set **Stop blocking** two minutes ahead; covers disappear on their own when it passes.
+8. **Show anyway.** Click **Show anyway** on one cover. It should change to "Click again to show" and revert after 3 seconds if you don't click. Click twice to reveal that item only; other covers stay. Reload the page and it's covered again.
+9. **Global switch.** Use the popup's on/off switch. Everything should restore, then re-cover when you switch it back on.
+10. **Persistence.** Restart Chrome; the rule should still be there.
+11. **Instagram.** Make a rule for a hashtag you follow or that appears in your feed. Check the home feed, a hashtag page, and a profile grid.
+
+For a fuller checklist covering every page type, overlay behaviour and schedules, see `TEST_CASES.md`.
 
 ## Debugging
 
@@ -75,6 +82,10 @@ A personal Chrome extension that covers YouTube videos and Instagram posts match
 ## Updating after code changes
 
 Edit the files, then click the reload icon on the extension card in `chrome://extensions`. Open a new YouTube/Instagram tab. Tabs that were already open keep the old version until refreshed.
+
+## Performance benchmark
+
+`node bench/workload.js` simulates a YouTube-like page (200 cards, a playing video, hovering, tab switches, a reused card) and prints how many times card text was read, the expensive step. Set `SCANNER=<path>` to compare another version of `scanner.js`.
 
 ## Running the automated tests
 

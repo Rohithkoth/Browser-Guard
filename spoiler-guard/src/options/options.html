@@ -27,7 +27,14 @@
           <textarea id="rule-keywords" rows="5" placeholder="Avengers: Doomsday&#10;Avengers Doomsday&#10;Doctor Doom"></textarea>
         </label>
         <label class="field">
-          <span>Expires <small>optional; leave empty to keep it until you turn it off</small></span>
+          <span>Start blocking <small>optional; e.g. release day, so trailers stay visible until then</small></span>
+          <span class="row">
+            <input type="datetime-local" id="rule-starts">
+            <button type="button" class="ghost" id="clear-starts">Clear</button>
+          </span>
+        </label>
+        <label class="field">
+          <span>Stop blocking <small>optional; leave empty to keep it until you turn it off</small></span>
           <span class="row">
             <input type="datetime-local" id="rule-expires">
             <button type="button" class="ghost" id="clear-expires">Clear</button>

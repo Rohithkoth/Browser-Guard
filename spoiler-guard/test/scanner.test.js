@@ -19,10 +19,11 @@ const NOW = Date.now();
 const DOOMSDAY = { id: 'a', name: 'Avengers: Doomsday', keywords: ['Avengers Doomsday', 'Doctor Doom'], enabled: true, expiresAt: null };
 const GTA = { id: 'b', name: 'GTA VI', keywords: ['GTA 6', 'GTA VI'], enabled: true, expiresAt: null };
 
-const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
+// Changes are checked on the next animation frame (~16ms in jsdom).
+const flush = () => new Promise((resolve) => setTimeout(resolve, 40));
 
 function setup(body, platform = 'youtube') {
-  const dom = new JSDOM(`<!doctype html><html><body>${body}</body></html>`, { runScripts: 'outside-only' });
+  const dom = new JSDOM(`<!doctype html><html><body>${body}</body></html>`, { runScripts: 'outside-only', pretendToBeVisual: true });
   for (const code of FILES) dom.window.eval(code);
   const w = dom.window;
   const SG = w.SpoilerGuard;
@@ -207,4 +208,59 @@ test('Instagram: the post link inside a feed article is marked checked', () => {
   apply([DOOMSDAY]);
   assert.ok($('#post').hasAttribute('data-sg-checked'));
   assert.ok($('#inner-link').hasAttribute('data-sg-checked'));
+});
+
+test('"Show anyway" needs two clicks, then keeps that item visible', async () => {
+  const { apply, $, hostOf } = setup(ytCard('spoiler', 'Avengers Doomsday') + ytCard('other', 'Doctor Doom'));
+  apply([DOOMSDAY]);
+  const button = hostOf($('#spoiler'))._sgButton;
+  assert.ok(button, 'overlay has a Show anyway button');
+
+  button.click();
+  assert.ok($('#spoiler').classList.contains('sg-concealed'), 'first click only arms it');
+  button.click();
+  assert.ok(!$('#spoiler').classList.contains('sg-concealed'), 'second click reveals');
+  assert.equal(hostOf($('#spoiler')), null);
+  assert.ok($('#other').classList.contains('sg-concealed'), 'other items stay covered');
+
+  // Stays revealed when the card's text changes in place (e.g. a view count
+  // updating) or rules are re-applied.
+  $('#spoiler').append(' 1.3M views');
+  await flush();
+  apply([DOOMSDAY]);
+  assert.ok(!$('#spoiler').classList.contains('sg-concealed'));
+});
+
+test('"Show anyway" is forgotten when the card is reused for different content', async () => {
+  const { apply, $, hostOf } = setup(ytCard('reused', 'Avengers Doomsday trailer'));
+  apply([DOOMSDAY]);
+  const button = hostOf($('#reused'))._sgButton;
+  button.click();
+  button.click();
+  assert.ok(!$('#reused').classList.contains('sg-concealed'));
+
+  // YouTube swaps in a different video: new link and new title.
+  $('#thumbnail').setAttribute('href', '/watch?v=different');
+  $('#video-title').textContent = 'Avengers Doomsday ending explained';
+  await flush();
+  assert.ok($('#reused').classList.contains('sg-concealed'));
+});
+
+test('"Show anyway" clicks never reach the hidden item', () => {
+  const { apply, $, hostOf } = setup(ytCard('spoiler', 'Avengers Doomsday'));
+  apply([DOOMSDAY]);
+  let reached = 0;
+  $('#spoiler').addEventListener('click', () => reached++);
+  hostOf($('#spoiler'))._sgButton.click();
+  assert.equal(reached, 0);
+});
+
+test('scheduled rule leaves trailers visible, then covers them once it starts', () => {
+  const { SG, scanner, $ } = setup(ytCard('trailer', 'Avengers Doomsday official trailer'));
+  const release = NOW + 60 * 60 * 1000;
+  const scheduled = { ...DOOMSDAY, startsAt: release };
+  scanner.setRules(SG.compileRules([scheduled], NOW));
+  assert.ok(!$('#trailer').classList.contains('sg-concealed'));
+  scanner.setRules(SG.compileRules([scheduled], release));
+  assert.ok($('#trailer').classList.contains('sg-concealed'));
 });

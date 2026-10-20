@@ -4,7 +4,7 @@
   // If something goes wrong before the first scan finishes, stop pre-hiding
   // after this long rather than leaving the page blank.
   const FAIL_OPEN_MS = 4000;
-  // setTimeout can't wait longer than ~24.8 days; longer expiries just re-check.
+  // setTimeout can't wait longer than ~24.8 days; later dates just re-check.
   const MAX_TIMER_MS = 2 ** 31 - 1;
 
   const adapter = Object.values(SG.platforms).find((p) => p.matchesHost(location.hostname));
@@ -17,7 +17,8 @@
   const failOpen = setTimeout(() => html.classList.remove(ARMED_CLASS), FAIL_OPEN_MS);
 
   const scanner = SG.createScanner(adapter, document);
-  let expiryTimer = null;
+  let changeTimer = null;
+  let nextChangeAt = null;
 
   async function refresh() {
     try {
@@ -26,7 +27,7 @@
       const compiled = enabled ? SG.compileRules(rules, now) : [];
       scanner.setRules(compiled);
       html.classList.toggle(ARMED_CLASS, compiled.length > 0);
-      scheduleExpiry(enabled ? SG.nextExpiry(rules, now) : null, now);
+      scheduleNextChange(enabled ? SG.nextChange(rules, now) : null, now);
     } catch (err) {
       console.error('[Spoiler Guard] could not apply rules', err);
       html.classList.remove(ARMED_CLASS);
@@ -35,17 +36,22 @@
     }
   }
 
-  function scheduleExpiry(at, now) {
-    clearTimeout(expiryTimer);
-    expiryTimer = null;
+  // Re-applies rules the moment one starts or expires.
+  function scheduleNextChange(at, now) {
+    clearTimeout(changeTimer);
+    changeTimer = null;
+    nextChangeAt = at;
     if (at === null) return;
-    expiryTimer = setTimeout(refresh, Math.min(at - now + 50, MAX_TIMER_MS));
+    changeTimer = setTimeout(refresh, Math.min(at - now + 50, MAX_TIMER_MS));
   }
 
   SG.onSettingsChanged(refresh);
-  // Background tabs can have their timers delayed; catch up on expiry when the tab is shown.
+  // Background tabs can have their timers delayed. When the tab is shown again,
+  // catch up only if a start or end time has passed while it was hidden.
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') refresh();
+    if (document.visibilityState === 'visible' && nextChangeAt !== null && Date.now() >= nextChangeAt) {
+      refresh();
+    }
   });
   refresh();
 })();

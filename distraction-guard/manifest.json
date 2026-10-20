@@ -1,0 +1,19 @@
+{
+  "manifest_version": 3,
+  "name": "Distraction Guard",
+  "version": "0.2.0",
+  "description": "Hides YouTube Shorts and redirects Instagram Explore to your messages.",
+  "content_scripts": [
+    {
+      "matches": ["https://www.youtube.com/*"],
+      "css": ["hide-shorts.css"],
+      "run_at": "document_start"
+    },
+    {
+      "matches": ["https://www.instagram.com/*"],
+      "js": ["instagram-redirects.js"],
+      "run_at": "document_start"
+    }
+  ],
+  "incognito": "spanning"
+}
