@@ -1,0 +1,12 @@
+{
+  "name": "spoiler-guard",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Personal Chrome extension that hides spoilers on YouTube and Instagram.",
+  "scripts": {
+    "test": "node --test"
+  },
+  "devDependencies": {
+    "jsdom": "^26.0.0"
+  }
+}

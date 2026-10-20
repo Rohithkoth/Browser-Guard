@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Spoiler Guard settings</title>
+  <link rel="stylesheet" href="../ui.css">
+</head>
+<body>
+  <main class="page">
+    <header class="page-head">
+      <h1>Spoiler Guard</h1>
+      <label class="switch">
+        <input type="checkbox" id="global-enabled">
+        <span>Spoiler Guard is on</span>
+      </label>
+    </header>
+
+    <section class="card">
+      <h2 id="form-title">New rule</h2>
+      <form id="rule-form" novalidate>
+        <label class="field">
+          <span>Name <small>shown on the overlay</small></span>
+          <input type="text" id="rule-name" placeholder="Avengers: Doomsday" maxlength="80">
+        </label>
+        <label class="field">
+          <span>Keywords <small>one per line; any of them triggers the rule</small></span>
+          <textarea id="rule-keywords" rows="5" placeholder="Avengers: Doomsday&#10;Avengers Doomsday&#10;Doctor Doom"></textarea>
+        </label>
+        <label class="field">
+          <span>Expires <small>optional; leave empty to keep it until you turn it off</small></span>
+          <span class="row">
+            <input type="datetime-local" id="rule-expires">
+            <button type="button" class="ghost" id="clear-expires">Clear</button>
+          </span>
+        </label>
+        <p class="messages" id="form-messages" role="status"></p>
+        <div class="row">
+          <button type="submit" id="save-rule">Add rule</button>
+          <button type="button" class="ghost" id="cancel-edit" hidden>Cancel</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="card">
+      <h2>Rules</h2>
+      <p class="empty" id="empty-state">No rules yet. Add one above.</p>
+      <ul class="rule-list" id="rule-list"></ul>
+    </section>
+  </main>
+  <script src="../shared/normalize.js"></script>
+  <script src="../shared/rules.js"></script>
+  <script src="../shared/storage.js"></script>
+  <script src="options.js"></script>
+</body>
+</html>
