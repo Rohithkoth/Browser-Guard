@@ -1,0 +1,83 @@
+# Time Guard test list
+# Import it from Settings -> Daily limits -> "Import a list of sites".
+# It mixes every supported format on purpose, and has 3 deliberate
+# mistakes near the end so you can see how skipped lines are reported.
+#
+# Heads up: removing sites or raising limits afterwards needs a code
+# from your authenticator app, so keep your phone handy while testing.
+
+site,minutes
+
+# ---- Quick-test sites: harmless placeholder pages, very short limits ----
+example.com 1
+example.org 1
+https://www.example.net/ 2
+
+# ---- Video ----
+youtube.com 60
+twitch.tv, 45
+netflix.com; 90
+hulu.com	60
+disneyplus.com 60
+primevideo.com 60
+max.com 60
+vimeo.com 30
+dailymotion.com 15
+kick.com 20
+
+# ---- Social ----
+instagram.com 20
+facebook.com 20
+x.com 15
+twitter.com 15
+tiktok.com 10
+snapchat.com 10
+threads.net 15
+bsky.app 15
+reddit.com 20
+tumblr.com 15
+pinterest.com 15
+linkedin.com 30
+discord.com 45
+mastodon.social 15
+
+# ---- News and forums: no minutes given, so these use the default ----
+news.ycombinator.com
+cnn.com
+foxnews.com
+nytimes.com
+bbc.com
+espn.com
+buzzfeed.com
+9gag.com
+imgur.com
+quora.com
+
+# ---- Full addresses: paths, www and http(s) are stripped ----
+https://www.amazon.com/gp/bestsellers 20
+http://ebay.com/deals 15
+https://store.steampowered.com/ 30
+https://www.etsy.com/ 15
+
+# ---- Units on minutes are fine ----
+roblox.com 30min
+chess.com 45 minutes
+lichess.org 45m
+
+# ---- Games and other time sinks ----
+epicgames.com 30
+itch.io 30
+fandom.com 20
+tvtropes.org 15
+wikipedia.org 120
+duolingo.com 30
+spotify.com 240
+soundcloud.com 120
+
+# ---- Duplicate: youtube.com again; this later entry (45) wins ----
+youtube.com 45
+
+# ---- Deliberate mistakes: these 3 lines are skipped and reported ----
+not a website
+localhost 10
+facebook.com 0

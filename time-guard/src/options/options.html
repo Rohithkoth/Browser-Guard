@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Time Guard settings</title>
+  <link rel="stylesheet" href="../ui.css">
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <main class="page">
+    <header class="page-head">
+      <h1>Time Guard</h1>
+      <span class="muted" id="head-status"></span>
+    </header>
+
+    <!-- Setup: shown until an authenticator is confirmed, and when replacing one. -->
+    <section class="card" id="setup" hidden>
+      <h2 id="setup-title">Set up your unlock codes</h2>
+      <p>When you hit a limit, the only way past it is a 6-digit code from an authenticator app on your phone. The code changes every 30 seconds, so there's nothing to memorize.</p>
+      <ol class="steps">
+        <li>
+          <strong>Add Time Guard to your authenticator app.</strong>
+          Open Google Authenticator, Microsoft Authenticator, Authy or similar, choose <em>Add account</em> → <em>Scan a QR code</em>, and scan this:
+          <div class="qr-wrap">
+            <canvas id="qr" width="296" height="296" aria-label="QR code for your authenticator app"></canvas>
+          </div>
+          <details>
+            <summary>Can't scan? Enter the key instead</summary>
+            <p>Choose <em>Enter a setup key</em>, type <strong>Time Guard</strong> as the name, and enter this key (time-based):</p>
+            <p class="key" id="setup-key"></p>
+          </details>
+        </li>
+        <li>
+          <strong>Enter the code your app now shows for Time Guard.</strong>
+          <form class="row" id="confirm-form">
+            <input class="code" id="confirm-code" inputmode="numeric" autocomplete="one-time-code" maxlength="7" placeholder="000000" aria-label="6-digit code">
+            <button type="submit">Finish setup</button>
+            <button type="button" class="ghost" id="setup-cancel" hidden>Cancel</button>
+          </form>
+          <p class="messages" id="setup-messages" role="status"></p>
+        </li>
+      </ol>
+      <p class="muted">After setup, this page never shows the key again.</p>
+    </section>
+
+    <section class="card" id="limits" hidden>
+      <h2>Daily limits</h2>
+      <p class="muted">Time counts while a site is in the focused tab, or while it's playing sound. Limits reset at midnight.</p>
+      <div class="site-list" id="site-list"></div>
+      <details class="import" id="import">
+        <summary>Import a list of sites</summary>
+        <p class="muted">A <code>.txt</code> or <code>.csv</code> file with one site per line, optionally followed by its daily minutes: <code>youtube.com 60</code>, <code>reddit.com, 20</code> or just <code>tiktok.com</code>. Full addresses are fine, and lines starting with <code>#</code> are ignored.</p>
+        <div class="row">
+          <label class="row">Minutes for sites without a time
+            <input id="import-default" type="number" min="1" max="1440" value="30" aria-label="Default daily minutes">
+          </label>
+          <button type="button" class="ghost" id="import-button">Choose file…</button>
+          <input type="file" id="import-file" accept=".txt,.csv,text/plain,text/csv" hidden>
+        </div>
+        <p class="messages" id="import-messages" role="status"></p>
+      </details>
+      <form class="row add-row" id="add-form">
+        <input id="add-domain" placeholder="youtube.com" aria-label="Website to limit" autocomplete="off">
+        <input id="add-minutes" type="number" min="1" max="1440" placeholder="minutes" aria-label="Daily minutes">
+        <button type="submit" class="ghost">Add site</button>
+      </form>
+      <label class="row total">
+        <span>Daily total across all sites</span>
+        <input id="cap" type="number" min="1" max="1440" placeholder="no total">
+        <span class="muted">min</span>
+      </label>
+      <label class="row">
+        <input type="checkbox" id="paused">
+        <span>Pause Time Guard <small>(nothing is counted or blocked)</small></span>
+      </label>
+
+      <div class="code-gate" id="gate" hidden>
+        <p><strong>These changes loosen your limits:</strong></p>
+        <ul id="gate-reasons"></ul>
+        <p>Enter a code from your authenticator app to save them.</p>
+        <div class="row">
+          <input class="code" id="gate-code" inputmode="numeric" autocomplete="one-time-code" maxlength="7" placeholder="000000" aria-label="6-digit code">
+        </div>
+      </div>
+
+      <div class="row save-row">
+        <button type="button" id="save">Save changes</button>
+        <button type="button" class="ghost" id="discard">Discard</button>
+        <span class="muted" id="dirty-note" hidden>Unsaved changes</span>
+      </div>
+      <p class="messages" id="limit-messages" role="status"></p>
+      <p class="muted hint">Adding sites, lowering limits and adding a total are always free. Raising or removing anything, or pausing, needs a code.</p>
+    </section>
+
+    <section class="card" id="authenticator" hidden>
+      <h2>Authenticator</h2>
+      <p>Moving to a new phone? Enter a code from your current app to set up the new one. The old entry stops working once the new one is confirmed.</p>
+      <form class="row" id="replace-form">
+        <input class="code" id="replace-code" inputmode="numeric" autocomplete="one-time-code" maxlength="7" placeholder="000000" aria-label="6-digit code from your current app">
+        <button type="submit" class="ghost">Set up a new authenticator</button>
+      </form>
+      <p class="messages" id="replace-messages" role="status"></p>
+      <details>
+        <summary>Lost your phone?</summary>
+        <p>There's no backdoor code. Remove Time Guard in <code>chrome://extensions</code> and load it again; that clears your limits and today's usage, and you set up a new authenticator.</p>
+      </details>
+    </section>
+  </main>
+  <script src="../../vendor/qrcode.js"></script>
+  <script src="../shared/limits.js"></script>
+  <script src="../shared/client.js"></script>
+  <script src="options.js"></script>
+</body>
+</html>
