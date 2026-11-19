@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Time's up · Time Guard</title>
+  <link rel="stylesheet" href="../ui.css">
+  <link rel="stylesheet" href="blocked.css">
+</head>
+<body>
+  <main class="blocked">
+    <p class="brand">Time Guard</p>
+    <h1 id="headline">Time's up</h1>
+    <p class="usage" id="usage"></p>
+    <p class="muted" id="reset"></p>
+
+    <section class="card unlock" id="unlock">
+      <h2>Need more time?</h2>
+      <p>Open your authenticator app and enter the current Time Guard code, then choose how long.</p>
+      <form id="unlock-form">
+        <input class="code" id="code" inputmode="numeric" autocomplete="one-time-code" maxlength="7" placeholder="000000" aria-label="6-digit code">
+        <div class="choices">
+          <button type="submit" value="15m">15 more minutes</button>
+          <button type="submit" value="1h" class="ghost">1 more hour</button>
+          <button type="submit" value="day" class="ghost">Rest of today</button>
+        </div>
+      </form>
+      <p class="messages" id="messages" role="status"></p>
+    </section>
+
+    <section class="card" id="done" hidden>
+      <h2 id="done-title">Unlocked</h2>
+      <p id="done-text"></p>
+      <a id="continue" href="#">Continue</a>
+    </section>
+
+    <p><button type="button" class="ghost" id="close">Close this tab</button></p>
+  </main>
+  <script src="../shared/limits.js"></script>
+  <script src="../shared/client.js"></script>
+  <script src="blocked.js"></script>
+</body>
+</html>

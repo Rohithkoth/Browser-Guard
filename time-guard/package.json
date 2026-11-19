@@ -1,0 +1,12 @@
+{
+  "name": "time-guard",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Personal Chrome extension: daily time limits unlocked only with an authenticator-app code.",
+  "scripts": {
+    "test": "node --test"
+  },
+  "devDependencies": {
+    "jsdom": "^26.1.0"
+  }
+}

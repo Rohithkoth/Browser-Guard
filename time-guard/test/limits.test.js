@@ -1,0 +1,148 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const TG = require('../src/shared/limits.js');
+
+const MIN = 60 * 1000;
+const NOW = new Date(2026, 10, 18, 15, 0).getTime();
+const config = (over = {}) => ({
+  sites: [{ domain: 'youtube.com', limitMin: 60 }, { domain: 'instagram.com', limitMin: 20 }],
+  overallCapMin: null,
+  paused: false,
+  ...over,
+});
+const usage = (over = {}) => ({ ...TG.freshUsage(NOW), ...over });
+
+test('normalizeDomain cleans up pasted addresses', () => {
+  assert.equal(TG.normalizeDomain('https://www.YouTube.com/watch?v=1'), 'youtube.com');
+  assert.equal(TG.normalizeDomain('m.youtube.com'), 'm.youtube.com');
+  assert.equal(TG.normalizeDomain('reddit.com/r/all'), 'reddit.com');
+  assert.equal(TG.normalizeDomain('localhost'), '');
+  assert.equal(TG.normalizeDomain('not a site'), '');
+  assert.equal(TG.normalizeDomain(''), '');
+});
+
+test('subdomains count toward their site; lookalikes do not', () => {
+  const sites = config().sites;
+  assert.equal(TG.siteForUrl('https://www.youtube.com/watch?v=1', sites), 'youtube.com');
+  assert.equal(TG.siteForUrl('https://m.youtube.com/', sites), 'youtube.com');
+  assert.equal(TG.siteForUrl('https://notyoutube.com/', sites), null);
+  assert.equal(TG.siteForUrl('https://youtube.com.evil.example/', sites), null);
+  assert.equal(TG.siteForUrl('chrome-extension://abc/blocked.html', sites), null);
+  assert.equal(TG.siteForUrl('not a url', sites), null);
+  const nested = [{ domain: 'google.com', limitMin: 5 }, { domain: 'mail.google.com', limitMin: 50 }];
+  assert.equal(TG.siteForHost('mail.google.com', nested), 'mail.google.com', 'most specific wins');
+});
+
+test('per-site limit blocks only that site', () => {
+  const u = usage({ perSite: { 'youtube.com': 60 * MIN }, totalMs: 60 * MIN });
+  assert.equal(TG.isBlocked('youtube.com', config(), u), true);
+  assert.equal(TG.blockReason('youtube.com', config(), u), 'site');
+  assert.equal(TG.isBlocked('instagram.com', config(), u), false);
+});
+
+test('the overall cap blocks every tracked site once reached', () => {
+  const c = config({ overallCapMin: 70 });
+  const u = usage({ perSite: { 'youtube.com': 55 * MIN, 'instagram.com': 15 * MIN }, totalMs: 70 * MIN });
+  assert.equal(TG.isBlocked('youtube.com', c, u), true);
+  assert.equal(TG.isBlocked('instagram.com', c, u), true);
+  assert.equal(TG.blockReason('youtube.com', c, u), 'total');
+  assert.equal(TG.remainingUnderLimits('youtube.com', c, usage({ perSite: { 'youtube.com': 10 * MIN }, totalMs: 65 * MIN })), 5 * MIN);
+});
+
+test('pausing lifts every limit', () => {
+  const u = usage({ perSite: { 'youtube.com': 999 * MIN }, totalMs: 999 * MIN });
+  assert.equal(TG.isBlocked('youtube.com', config({ paused: true }), u), false);
+});
+
+test('usage resets at local midnight', () => {
+  const old = usage({ day: '2026-11-17', perSite: { 'youtube.com': 60 * MIN }, totalMs: 60 * MIN });
+  assert.equal(TG.currentUsage(old, NOW).totalMs, 0);
+  const today = usage({ totalMs: 5 });
+  assert.equal(TG.currentUsage(today, NOW), today);
+  assert.equal(TG.nextReset(NOW), new Date(2026, 10, 19).getTime());
+});
+
+test('elapsed time counts once toward the total even with two sites active', () => {
+  const u = TG.applyElapsed(usage(), config(), ['youtube.com', 'instagram.com'], 5 * MIN);
+  assert.equal(u.perSite['youtube.com'], 5 * MIN);
+  assert.equal(u.perSite['instagram.com'], 5 * MIN);
+  assert.equal(u.totalMs, 5 * MIN);
+  assert.equal(TG.applyElapsed(usage(), config(), [], 5 * MIN).totalMs, 0);
+});
+
+test('grants: 15 min and 1 h add bonus time, rest of day is unlimited', () => {
+  const blocked = usage({ perSite: { 'youtube.com': 60 * MIN }, totalMs: 60 * MIN });
+  let u = TG.applyGrant(blocked, 'youtube.com', '15m');
+  assert.equal(TG.isBlocked('youtube.com', config(), u), false);
+  assert.equal(TG.timeLeft('youtube.com', config(), u), 15 * MIN);
+  u = TG.applyGrant(u, 'youtube.com', '1h');
+  assert.equal(TG.timeLeft('youtube.com', config(), u), 75 * MIN);
+  const day = TG.applyGrant(blocked, 'youtube.com', 'day');
+  assert.equal(TG.isBlocked('youtube.com', config(), day), false);
+  assert.equal(TG.timeLeft('youtube.com', config(), day), Infinity);
+  assert.throws(() => TG.applyGrant(blocked, 'youtube.com', 'forever'));
+});
+
+test('bonus time is only spent once a site is past its limits, then it blocks again', () => {
+  // 5 min under the limit, 15 min bonus: 10 min of use spends 5 min of bonus.
+  let u = usage({ perSite: { 'youtube.com': 55 * MIN }, totalMs: 55 * MIN, bonusMs: { 'youtube.com': 15 * MIN } });
+  u = TG.applyElapsed(u, config(), ['youtube.com'], 10 * MIN);
+  assert.equal(u.bonusMs['youtube.com'], 10 * MIN);
+  assert.equal(TG.isBlocked('youtube.com', config(), u), false);
+  u = TG.applyElapsed(u, config(), ['youtube.com'], 10 * MIN);
+  assert.equal(u.bonusMs['youtube.com'], 0);
+  assert.equal(TG.isBlocked('youtube.com', config(), u), true);
+});
+
+test('unlimited sites never spend bonus and never block', () => {
+  let u = usage({ perSite: { 'youtube.com': 60 * MIN }, totalMs: 60 * MIN, unlimited: { 'youtube.com': true }, bonusMs: { 'youtube.com': 5 * MIN } });
+  u = TG.applyElapsed(u, config(), ['youtube.com'], 30 * MIN);
+  assert.equal(u.bonusMs['youtube.com'], 5 * MIN);
+  assert.equal(TG.isBlocked('youtube.com', config(), u), false);
+});
+
+test('msUntilNextBlock finds the first active site to run out', () => {
+  const u = usage({ perSite: { 'youtube.com': 50 * MIN, 'instagram.com': 18 * MIN }, totalMs: 68 * MIN });
+  assert.equal(TG.msUntilNextBlock(['youtube.com', 'instagram.com'], config(), u), 2 * MIN);
+  assert.equal(TG.msUntilNextBlock(['youtube.com'], config({ overallCapMin: 70 }), u), 2 * MIN);
+  assert.equal(TG.msUntilNextBlock([], config(), u), Infinity);
+});
+
+test('looseningChanges: tightening is free, loosening is listed', () => {
+  const base = config({ overallCapMin: 90 });
+  assert.deepEqual(TG.looseningChanges(base, base), []);
+  assert.deepEqual(TG.looseningChanges(base, { ...base, sites: [...base.sites, { domain: 'reddit.com', limitMin: 10 }] }), [], 'adding a site');
+  assert.deepEqual(TG.looseningChanges(base, { ...base, sites: [{ domain: 'youtube.com', limitMin: 30 }, base.sites[1]] }), [], 'lowering a limit');
+  assert.deepEqual(TG.looseningChanges(base, { ...base, overallCapMin: 60 }), [], 'lowering the cap');
+  assert.deepEqual(TG.looseningChanges(config(), base), [], 'adding a cap');
+  assert.deepEqual(TG.looseningChanges({ ...base, paused: true }, base), [], 'resuming');
+
+  assert.deepEqual(TG.looseningChanges(base, { ...base, paused: true }), ['pausing Time Guard']);
+  assert.deepEqual(TG.looseningChanges(base, { ...base, sites: [base.sites[0]] }), ['removing instagram.com']);
+  assert.deepEqual(TG.looseningChanges(base, { ...base, sites: [{ domain: 'youtube.com', limitMin: 90 }, base.sites[1]] }), ['raising youtube.com from 60 to 90 min']);
+  assert.deepEqual(TG.looseningChanges(base, { ...base, overallCapMin: null }), ['removing the daily total cap']);
+  assert.deepEqual(TG.looseningChanges(base, { ...base, overallCapMin: 120 }), ['raising the daily total from 90 to 120 min']);
+});
+
+test('validateConfig normalizes domains and rejects bad input', () => {
+  const ok = TG.validateConfig({ sites: [{ domain: 'https://www.YouTube.com/', limitMin: '60' }], overallCapMin: '' });
+  assert.deepEqual(ok.errors, []);
+  assert.deepEqual(ok.config, { sites: [{ domain: 'youtube.com', limitMin: 60 }], overallCapMin: null, paused: false });
+
+  const bad = TG.validateConfig({
+    sites: [{ domain: 'nope', limitMin: 10 }, { domain: 'x.com', limitMin: 0 }, { domain: 'x.com', limitMin: 5 }, { domain: 'y.com', limitMin: 2.5 }],
+    overallCapMin: 2000,
+  });
+  const all = bad.errors.join('\n');
+  assert.match(all, /"nope" isn't a website address/);
+  assert.match(all, /limit for x.com must be a whole number/);
+  assert.match(all, /x.com is listed twice/);
+  assert.match(all, /limit for y.com/);
+  assert.match(all, /daily total must be/);
+});
+
+test('formatMinutes', () => {
+  assert.equal(TG.formatMinutes(5 * MIN + 59000), '5 min');
+  assert.equal(TG.formatMinutes(125 * MIN), '2 h 05 min');
+  assert.equal(TG.formatMinutes(Infinity), 'unlimited');
+});

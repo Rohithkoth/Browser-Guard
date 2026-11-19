@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Time Guard</title>
+  <link rel="stylesheet" href="../ui.css">
+  <style>
+    body { width: 300px; }
+    .wrap { padding: 14px; display: grid; gap: 12px; }
+    .head { display: flex; justify-content: space-between; align-items: baseline; }
+    .sites { display: grid; gap: 10px; }
+    .site-line { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
+    .site-line strong { overflow-wrap: anywhere; }
+    .left { color: var(--muted); white-space: nowrap; }
+    .left.out { color: var(--danger); }
+    .left.bonus { color: var(--accent); }
+    .banner { padding: 8px 10px; border-radius: 8px; border: 1px solid var(--warn); color: var(--warn); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="head"><strong>Time Guard</strong><span class="muted" id="reset"></span></div>
+    <p class="banner" id="banner" hidden></p>
+    <div class="sites" id="sites"></div>
+    <button id="settings" class="ghost">Settings</button>
+  </div>
+  <script src="../shared/limits.js"></script>
+  <script src="../shared/client.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>
