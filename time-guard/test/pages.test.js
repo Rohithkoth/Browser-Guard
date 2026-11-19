@@ -28,6 +28,14 @@ function openPage(b, page, query = '') {
   };
   w.HTMLCanvasElement.prototype.getContext = () => ({ fillRect() {}, clearRect() {}, set fillStyle(v) {} });
   w.HTMLElement.prototype.scrollIntoView = () => {};
+  // jsdom's Blob/File lack .text(), which Chrome has; fill it in for the tests.
+  w.Blob.prototype.text = function () {
+    return new Promise((resolve) => {
+      const reader = new w.FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.readAsText(this);
+    });
+  };
   const scripts = [...read(`src/${page}/${page}.html`).matchAll(/<script src="([^"]+)"/g)].map((m) => m[1]);
   for (const src of scripts) w.eval(read(path.join('src', page, src)));
   return { w, $: (id) => w.document.getElementById(id), replaced };
@@ -138,12 +146,13 @@ test('block page: shows the limit, and a code plus a choice unlocks and sends yo
   assert.match(page.$('messages').textContent, /isn't right/);
 
   page.$('code').value = await b.code(secret);
-  await submit(page.w, page.$('unlock-form'), buttons[1]); // "1 more hour"
+  await submit(page.w, page.$('unlock-form'), buttons[1]); // "15 more minutes"
   assert.equal(page.$('done').hidden, false);
-  assert.match(page.$('done-text').textContent, /1 more hour on youtube.com/);
+  assert.match(page.$('done-text').textContent, /15 more minutes on youtube.com/);
   assert.equal(page.$('continue').href, 'https://www.youtube.com/watch?v=abc');
   const s = await b.send({ type: 'status' });
-  assert.equal(s.usage.bonusMs['youtube.com'], 60 * MIN);
+  assert.equal(s.usage.bonusMs['youtube.com'], 15 * MIN);
+  assert.deepEqual([...buttons].map((x) => x.textContent), ['1 more minute', '15 more minutes', '30 more minutes']);
 });
 
 test('block page: never sends you anywhere but the limited site', async () => {
@@ -155,4 +164,56 @@ test('block page: never sends you anywhere but the limited site', async () => {
   page.$('code').value = await b.code(secret);
   await submit(page.w, page.$('unlock-form'), page.w.document.querySelector('.choices button'));
   assert.equal(page.$('continue').href, 'https://youtube.com/');
+});
+
+async function importFile(page, text, name = 'sites.txt') {
+  const input = page.$('import-file');
+  const file = new page.w.File([text], name, { type: 'text/plain' });
+  Object.defineProperty(input, 'files', { value: [file], configurable: true });
+  input.dispatchEvent(new page.w.Event('change'));
+  await settle();
+}
+
+test('settings page: importing a site list fills the editor; Save applies it', async () => {
+  const { b, page } = await setUpWith([['youtube.com', 30]]);
+  page.$('import-default').value = '25';
+  await importFile(page, '# test\nreddit.com, 20\nhttps://www.tiktok.com/foryou\nnot a site\nyoutube.com 10\n');
+  const msg = page.$('import-messages').textContent;
+  assert.match(msg, /sites.txt: 2 added, 1 changed/);
+  assert.match(msg, /Skipped 1 line/);
+  assert.match(msg, /Line 4/);
+  assert.equal((await b.send({ type: 'status' })).config.sites.length, 1, 'nothing saved until Save');
+  assert.equal(page.$('site-list').querySelectorAll('.site').length, 3);
+
+  page.$('save').click();
+  await settle();
+  assert.match(page.$('limit-messages').textContent, /Saved/, 'lowering youtube.com and adding sites needs no code');
+  assert.deepEqual((await b.send({ type: 'status' })).config.sites, [
+    { domain: 'youtube.com', limitMin: 10 },
+    { domain: 'reddit.com', limitMin: 20 },
+    { domain: 'tiktok.com', limitMin: 25 },
+  ]);
+});
+
+test('settings page: an import that raises a limit asks for a code on Save', async () => {
+  const { b, page, secret } = await setUpWith([['youtube.com', 30]]);
+  await importFile(page, 'youtube.com 120\nreddit.com 5');
+  page.$('save').click();
+  await settle();
+  assert.equal(page.$('gate').hidden, false);
+  assert.match(page.$('gate-reasons').textContent, /raising youtube.com from 30 to 120 min/);
+  page.$('gate-code').value = await b.code(secret);
+  page.$('save').click();
+  await settle();
+  assert.equal((await b.send({ type: 'status' })).config.sites.length, 2);
+});
+
+test('settings page: the bundled test file imports cleanly apart from its deliberate mistakes', async () => {
+  const { b, page } = await setUpWith([]);
+  await importFile(page, read('examples/test-sites.txt'), 'test-sites.txt');
+  page.$('save').click();
+  await settle();
+  const sites = (await b.send({ type: 'status' })).config.sites;
+  assert.ok(sites.length >= 50, `got ${sites.length}`);
+  assert.match(page.$('import-messages').textContent, /Skipped 3 lines/);
 });

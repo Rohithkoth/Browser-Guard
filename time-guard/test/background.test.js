@@ -119,7 +119,7 @@ test('unlocking: a valid code plus a choice lets the site back in; codes cannot 
   assert.match((await b.send({ type: 'unlock', site: 'youtube.com', code: '123456', choice: '15m' })).error, /isn't right/);
   const code = await b.code(secret);
   assert.deepEqual(await b.send({ type: 'unlock', site: 'youtube.com', code, choice: '15m' }), { ok: true });
-  assert.match((await b.send({ type: 'unlock', site: 'youtube.com', code, choice: 'day' })).error, /isn't right/, 'replay');
+  assert.match((await b.send({ type: 'unlock', site: 'youtube.com', code, choice: '30m' })).error, /isn't right/, 'replay');
 
   // The block page sends you back; time then runs on the 15-minute bonus.
   b.tab(tab.id).url = 'https://www.youtube.com/';
@@ -130,22 +130,43 @@ test('unlocking: a valid code plus a choice lets the site back in; codes cannot 
   assert.ok(b.tab(tab.id).url.startsWith(BLOCK), 'blocked again once the 15 minutes are used');
 });
 
-test('"rest of the day" lasts until midnight, then limits apply again', async () => {
+test('extra time from a code ends at midnight with everything else', async () => {
   const { b, secret } = await ready();
   const tab = await b.openTab('https://www.youtube.com/');
   await b.advance(3 * MIN);
-  await b.send({ type: 'unlock', site: 'youtube.com', code: await b.code(secret), choice: 'day' });
+  assert.deepEqual(await b.send({ type: 'unlock', site: 'youtube.com', code: await b.code(secret), choice: '30m' }), { ok: true });
+  assert.equal((await b.send({ type: 'status' })).usage.bonusMs['youtube.com'], 30 * MIN);
   b.tab(tab.id).url = 'https://www.youtube.com/';
   await b.event('updated', tab.id, { url: 'https://www.youtube.com/', status: 'loading' });
-  await b.advance(3 * 60 * MIN);
+  await b.advance(10 * MIN);
   assert.equal(b.tab(tab.id).url, 'https://www.youtube.com/');
-  // Next day: fresh usage, limit applies again.
+  // Next day: fresh usage and no leftover extra time.
   await b.advance(new Date(2026, 10, 19, 0, 5).getTime() - b.now);
   const s = await b.send({ type: 'status' });
   assert.equal(s.usage.day, '2026-11-19');
-  assert.equal(s.usage.unlimited['youtube.com'], undefined);
+  assert.equal(s.usage.bonusMs['youtube.com'], undefined);
   await b.advance(3 * MIN);
   assert.ok(b.tab(tab.id).url.startsWith(BLOCK));
+});
+
+test('a 1-minute unlock blocks again a minute later', async () => {
+  const { b, secret } = await ready();
+  const tab = await b.openTab('https://www.youtube.com/');
+  await b.advance(3 * MIN);
+  await b.send({ type: 'unlock', site: 'youtube.com', code: await b.code(secret), choice: '1m' });
+  b.tab(tab.id).url = 'https://www.youtube.com/';
+  await b.event('updated', tab.id, { url: 'https://www.youtube.com/', status: 'loading' });
+  await b.advance(30 * 1000);
+  assert.equal(b.tab(tab.id).url, 'https://www.youtube.com/');
+  await b.advance(60 * 1000);
+  assert.ok(b.tab(tab.id).url.startsWith(BLOCK));
+});
+
+test('old unlock choices are refused', async () => {
+  const { b, secret } = await ready();
+  for (const choice of ['day', '1h', 'forever']) {
+    assert.match((await b.send({ type: 'unlock', site: 'youtube.com', code: await b.code(secret), choice })).error, /Pick how long/);
+  }
 });
 
 test('the daily total cap blocks every tracked site', async () => {

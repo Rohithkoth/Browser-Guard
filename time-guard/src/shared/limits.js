@@ -8,11 +8,12 @@
   // usage (chrome.storage.local "usage"), reset every day at local midnight:
   //   { day: '2026-11-18', perSite: { 'youtube.com': ms }, totalMs,
   //     bonusMs: { 'youtube.com': ms },   // extra time bought with a code
-  //     unlimited: { 'youtube.com': true } }  // "rest of the day" bought with a code
+  //     unlimited: { 'youtube.com': true } }  // from older versions' "rest of today"; no longer granted
 
   const MINUTE = 60 * 1000;
   const MAX_LIMIT_MIN = 24 * 60;
-  const GRANTS = { '15m': 15 * MINUTE, '1h': 60 * MINUTE, day: Infinity };
+  // What one code buys at the block page. Extra time only drains while you use the site.
+  const GRANTS = { '1m': 1 * MINUTE, '15m': 15 * MINUTE, '30m': 30 * MINUTE };
 
   // "https://www.YouTube.com/watch?v=1" -> "youtube.com". Returns '' if it
   // doesn't look like a domain.
@@ -129,7 +130,6 @@
 
   function applyGrant(usage, domain, choice) {
     if (!(choice in GRANTS)) throw new Error('Unknown unlock choice: ' + choice);
-    if (choice === 'day') return { ...usage, unlimited: { ...usage.unlimited, [domain]: true } };
     return { ...usage, bonusMs: { ...usage.bonusMs, [domain]: (usage.bonusMs[domain] || 0) + GRANTS[choice] } };
   }
 
@@ -185,6 +185,74 @@
     return { errors, config: { sites, overallCapMin, paused: Boolean(input.paused) } };
   }
 
+  // Reads a list of sites to limit, one per line, from a .txt or .csv file:
+  //   youtube.com 60            site and daily minutes
+  //   https://www.reddit.com/r/all, 20   full addresses and commas are fine
+  //   tiktok.com                no minutes: uses defaultMin
+  //   # comment                 ignored, as are blank lines and a header row
+  // Returns { sites, errors, duplicates }. A site listed twice keeps its last
+  // entry. Bad lines are reported with their line number and skipped.
+  function parseSiteList(text, defaultMin) {
+    const sites = new Map();
+    const errors = [];
+    let duplicates = 0;
+    const lines = String(text).replace(/^\uFEFF/, '').split(/\r?\n/);
+    lines.forEach((raw, i) => {
+      const line = raw.replace(/\s+#.*$/, '').trim();
+      if (!line || line.startsWith('#') || line.startsWith('//')) return;
+      const fields = line.split(/[\s,;\t]+/).filter(Boolean);
+      const where = `Line ${i + 1}`;
+      const domain = normalizeDomain(fields[0]);
+      if (!domain) {
+        // A header row like "site,minutes" or "domain;limit" isn't an error.
+        if (/^(site|domain|url|website|host)s?$/i.test(fields[0])) return;
+        errors.push(`${where}: "${fields[0]}" isn't a website address.`);
+        return;
+      }
+      let limitMin = defaultMin;
+      if (fields.length > 1) {
+        const minutes = Number(fields[1].replace(/m(in(ute)?s?)?$/i, ''));
+        if (!validLimit(minutes)) {
+          errors.push(`${where}: "${fields[1]}" isn't a valid number of minutes for ${domain} (1 to ${MAX_LIMIT_MIN}).`);
+          return;
+        }
+        limitMin = minutes;
+      }
+      if (!validLimit(limitMin)) {
+        errors.push(`${where}: no minutes given for ${domain}, and no default set.`);
+        return;
+      }
+      if (sites.has(domain)) duplicates++;
+      sites.set(domain, { domain, limitMin });
+    });
+    return { sites: [...sites.values()], errors, duplicates };
+  }
+
+  // Merges imported sites into a site list: new sites are added at the end and
+  // existing ones take the imported limit. Returns counts for the summary.
+  function mergeSites(existing, imported) {
+    const result = existing.map((s) => ({ ...s }));
+    const index = new Map(result.map((s, i) => [s.domain, i]));
+    let added = 0;
+    let updated = 0;
+    let unchanged = 0;
+    for (const site of imported) {
+      if (!index.has(site.domain)) {
+        index.set(site.domain, result.length);
+        result.push({ ...site });
+        added++;
+      } else {
+        const current = result[index.get(site.domain)];
+        if (current.limitMin === site.limitMin) unchanged++;
+        else {
+          current.limitMin = site.limitMin;
+          updated++;
+        }
+      }
+    }
+    return { sites: result, added, updated, unchanged };
+  }
+
   function formatMinutes(ms) {
     if (ms === Infinity) return 'unlimited';
     const min = Math.floor(ms / MINUTE);
@@ -212,6 +280,8 @@
     applyGrant,
     looseningChanges,
     validateConfig,
+    parseSiteList,
+    mergeSites,
     formatMinutes,
   });
   if (typeof module !== 'undefined') module.exports = TG;

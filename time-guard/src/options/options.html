@@ -47,6 +47,18 @@
       <h2>Daily limits</h2>
       <p class="muted">Time counts while a site is in the focused tab, or while it's playing sound. Limits reset at midnight.</p>
       <div class="site-list" id="site-list"></div>
+      <details class="import" id="import">
+        <summary>Import a list of sites</summary>
+        <p class="muted">A <code>.txt</code> or <code>.csv</code> file with one site per line, optionally followed by its daily minutes: <code>youtube.com 60</code>, <code>reddit.com, 20</code> or just <code>tiktok.com</code>. Full addresses are fine, and lines starting with <code>#</code> are ignored.</p>
+        <div class="row">
+          <label class="row">Minutes for sites without a time
+            <input id="import-default" type="number" min="1" max="1440" value="30" aria-label="Default daily minutes">
+          </label>
+          <button type="button" class="ghost" id="import-button">Choose file…</button>
+          <input type="file" id="import-file" accept=".txt,.csv,text/plain,text/csv" hidden>
+        </div>
+        <p class="messages" id="import-messages" role="status"></p>
+      </details>
       <form class="row add-row" id="add-form">
         <input id="add-domain" placeholder="youtube.com" aria-label="Website to limit" autocomplete="off">
         <input id="add-minutes" type="number" min="1" max="1440" placeholder="minutes" aria-label="Daily minutes">

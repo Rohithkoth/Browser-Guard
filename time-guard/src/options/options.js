@@ -137,6 +137,35 @@
     render();
   });
 
+  // ---- import a site list into the draft; Save applies it (with a code if it loosens) ----
+  $('import-button').addEventListener('click', () => $('import-file').click());
+  $('import-file').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    e.target.value = ''; // choosing the same file again still triggers a change
+    if (!file) return;
+    const defaultMin = Number($('import-default').value);
+    const parsed = TG.parseSiteList(await file.text(), defaultMin);
+    const lines = [];
+    if (!parsed.sites.length) {
+      lines.push(`No sites found in ${file.name}.`);
+    } else {
+      const merged = TG.mergeSites(draft.sites, parsed.sites);
+      draft.sites = merged.sites;
+      const parts = [`${merged.added} added`, `${merged.updated} changed`];
+      if (merged.unchanged) parts.push(`${merged.unchanged} already listed`);
+      lines.push(`${file.name}: ${parts.join(', ')}. Review the list, then Save to apply.`);
+      if (parsed.duplicates) lines.push(`${parsed.duplicates} site${parsed.duplicates === 1 ? ' was' : 's were'} listed more than once; the last entry was used.`);
+      render();
+    }
+    showMessages($('import-messages'), lines, parsed.sites.length ? 'warning' : 'error');
+    if (parsed.errors.length) {
+      $('import-messages').append(
+        el('span', { className: 'error', textContent: `Skipped ${parsed.errors.length} line${parsed.errors.length === 1 ? '' : 's'}:` }),
+        ...parsed.errors.map((t) => el('span', { className: 'error', textContent: t })),
+      );
+    }
+  });
+
   $('cap').addEventListener('input', () => {
     draft.overallCapMin = $('cap').value === '' ? null : Number($('cap').value);
     updateDirty();

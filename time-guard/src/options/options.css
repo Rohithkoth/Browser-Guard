@@ -11,6 +11,10 @@ details summary { cursor: pointer; color: var(--muted); }
 .site input { width: 80px; }
 .site.removed { opacity: .5; text-decoration: line-through; }
 .add-row { margin-bottom: 14px; }
+.import { margin: 4px 0 12px; }
+.import > .row { margin-top: 8px; }
+.import #import-default { width: 80px; }
+#import-messages { max-height: 160px; overflow-y: auto; }
 .add-row #add-domain { flex: 1; min-width: 160px; }
 .add-row #add-minutes { width: 100px; }
 .total { margin-bottom: 8px; }

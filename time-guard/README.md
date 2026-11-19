@@ -7,11 +7,11 @@ Runs entirely on your computer: no server, no account, no cost. Codes are checke
 ## How it works
 
 1. **Setup.** The settings page shows a QR code. Scan it with your authenticator app, then type the code the app shows to prove it worked. After that the key is never shown again.
-2. **Limits.** Add sites with a daily limit in minutes (e.g. youtube.com 60, instagram.com 20), plus an optional daily total across all of them.
+2. **Limits.** Add sites with a daily limit in minutes (e.g. youtube.com 60, instagram.com 20), plus an optional daily total across all of them. To add many at once, import a `.txt` or `.csv` list (see below).
 3. **Counting.** Time counts while a limited site is the active tab of the focused Chrome window, or while one of its tabs is playing sound (a video on a second screen). Nothing counts while Chrome is in the background, the computer is locked, or it's asleep. Two sites at once count once toward the daily total.
 4. **At the limit.** Every tab of that site is sent to a block page. Opening the site again goes straight there too.
-5. **Unlocking.** Enter the current code from your phone, then choose **15 more minutes**, **1 more hour** or **Rest of today**. Extra minutes only drain while you're actually using the site. **Continue** takes you back where you were.
-6. **Midnight.** Usage, extra time and "rest of today" unlocks all reset at local midnight.
+5. **Unlocking.** Enter the current code from your phone, then choose **1 more minute**, **15 more minutes** or **30 more minutes**. Each code buys one chunk; enter another code for more. Extra minutes only drain while you're actually using the site. **Continue** takes you back where you were.
+6. **Midnight.** Usage and leftover extra time reset at local midnight.
 
 ### Settings lock
 
@@ -20,6 +20,24 @@ Runs entirely on your computer: no server, no account, no cost. Codes are checke
 | Add a site, lower a limit, add or lower the daily total, resume | No |
 | Raise a limit, remove a site, raise or remove the daily total, pause | Yes |
 | Move to a new authenticator | Yes, from the current one |
+
+### Importing a list of sites
+
+Settings → **Daily limits** → **Import a list of sites** → **Choose file…**. The file has one site per line, optionally followed by its daily minutes:
+
+```
+# comments and blank lines are ignored; a "site,minutes" header row is fine
+youtube.com 60
+https://www.reddit.com/r/all, 20    full addresses are trimmed to the site
+twitch.tv; 45                       spaces, commas, semicolons or tabs
+roblox.com 30min                    "min", "m", "minutes" are fine
+tiktok.com                          no minutes: uses the default you set (30)
+```
+
+- **Review first.** Imported sites go into the editor first. Review them, then **Save changes**.
+- **Same rules as manual edits.** An import that only adds sites or lowers limits saves freely. One that raises an existing site's limit asks for a code.
+- **Duplicates.** A site listed twice keeps its last entry.
+- **Bad lines.** Lines that aren't a website or have invalid minutes are skipped and listed with their line numbers.
 
 ## Components
 
@@ -34,6 +52,7 @@ Runs entirely on your computer: no server, no account, no cost. Codes are checke
 | `src/blocked/` | The block page: how much you used, when it resets, and the code box with the three unlock choices. |
 | `src/popup/` | Toolbar popup: time left per site and for the daily total. |
 | `vendor/qrcode.js` | [qrcode-generator](https://github.com/kazuhikoarase/qrcode-generator) 2.0.4 (MIT), bundled so the extension never loads code from the internet. |
+| `examples/test-sites.txt` | A 52-site list for trying the import, covering every supported format, with 3 deliberate mistakes. |
 | `test/` | Automated tests, described below. |
 
 ### Design choices worth knowing
@@ -72,9 +91,9 @@ npm test
 ```
 
 - `test/totp.test.js`: code generation against the official RFC 6238 test vectors, clock drift, replays and malformed codes.
-- `test/limits.test.js`: site matching, limits, the daily total, extra time, midnight reset, what counts as loosening.
+- `test/limits.test.js`: site matching, limits, the daily total, extra time, midnight reset, what counts as loosening, reading and merging site lists (including a 5,000-site list).
 - `test/background.test.js`: runs the real service worker against a simulated Chrome (`test/fake-chrome.js`) with a controllable clock: counting, blocking, unlocking, lockout, Incognito, sleep, the total cap, settings changes.
-- `test/pages.test.js`: loads the real settings and block pages against that simulated Chrome and clicks through setup, saving limits, the code gate, and unlocking.
+- `test/pages.test.js`: loads the real settings and block pages against that simulated Chrome and clicks through setup, saving limits, the code gate, importing site lists (including `examples/test-sites.txt`), and unlocking.
 
 For checks in real Chrome, see `TEST_CASES.md`.
 

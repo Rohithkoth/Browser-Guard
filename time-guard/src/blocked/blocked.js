@@ -10,7 +10,8 @@
     const url = params.get('from');
     return url && TG.siteForUrl(url, [{ domain: site }]) ? url : `https://${site}/`;
   })();
-  let choice = '15m';
+  let choice = '1m';
+  const CHOICE_TEXT = { '1m': '1 more minute', '15m': '15 more minutes', '30m': '30 more minutes' };
 
   async function render() {
     const s = await send('status');
@@ -51,8 +52,7 @@
     }
     $('unlock').hidden = true;
     $('done').hidden = false;
-    $('done-text').textContent =
-      choice === 'day' ? `${site} is unlimited for the rest of today.` : `You have ${choice === '1h' ? '1 more hour' : '15 more minutes'} on ${site}.`;
+    $('done-text').textContent = `You have ${CHOICE_TEXT[choice]} on ${site}.`;
     $('continue').href = from;
     $('continue').textContent = `Continue to ${site}`;
     $('continue').focus();

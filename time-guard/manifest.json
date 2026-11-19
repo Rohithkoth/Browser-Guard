@@ -1,11 +1,21 @@
 {
   "manifest_version": 3,
   "name": "Time Guard",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Daily time limits for distracting sites. Going past a limit needs a code from your authenticator app.",
-  "permissions": ["storage", "alarms", "tabs", "idle"],
-  "background": { "service_worker": "src/background.js" },
-  "action": { "default_title": "Time Guard", "default_popup": "src/popup/popup.html" },
+  "permissions": [
+    "storage",
+    "alarms",
+    "tabs",
+    "idle"
+  ],
+  "background": {
+    "service_worker": "src/background.js"
+  },
+  "action": {
+    "default_title": "Time Guard",
+    "default_popup": "src/popup/popup.html"
+  },
   "options_page": "src/options/options.html",
   "incognito": "spanning"
 }

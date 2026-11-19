@@ -70,17 +70,16 @@ test('elapsed time counts once toward the total even with two sites active', () 
   assert.equal(TG.applyElapsed(usage(), config(), [], 5 * MIN).totalMs, 0);
 });
 
-test('grants: 15 min and 1 h add bonus time, rest of day is unlimited', () => {
+test('grants: 1, 15 and 30 minutes add extra time that stacks', () => {
   const blocked = usage({ perSite: { 'youtube.com': 60 * MIN }, totalMs: 60 * MIN });
-  let u = TG.applyGrant(blocked, 'youtube.com', '15m');
+  let u = TG.applyGrant(blocked, 'youtube.com', '1m');
   assert.equal(TG.isBlocked('youtube.com', config(), u), false);
-  assert.equal(TG.timeLeft('youtube.com', config(), u), 15 * MIN);
-  u = TG.applyGrant(u, 'youtube.com', '1h');
-  assert.equal(TG.timeLeft('youtube.com', config(), u), 75 * MIN);
-  const day = TG.applyGrant(blocked, 'youtube.com', 'day');
-  assert.equal(TG.isBlocked('youtube.com', config(), day), false);
-  assert.equal(TG.timeLeft('youtube.com', config(), day), Infinity);
-  assert.throws(() => TG.applyGrant(blocked, 'youtube.com', 'forever'));
+  assert.equal(TG.timeLeft('youtube.com', config(), u), 1 * MIN);
+  u = TG.applyGrant(u, 'youtube.com', '15m');
+  u = TG.applyGrant(u, 'youtube.com', '30m');
+  assert.equal(TG.timeLeft('youtube.com', config(), u), 46 * MIN);
+  assert.deepEqual(Object.keys(TG.GRANTS), ['1m', '15m', '30m']);
+  for (const old of ['day', '1h']) assert.throws(() => TG.applyGrant(blocked, 'youtube.com', old));
 });
 
 test('bonus time is only spent once a site is past its limits, then it blocks again', () => {
@@ -145,4 +144,63 @@ test('formatMinutes', () => {
   assert.equal(TG.formatMinutes(5 * MIN + 59000), '5 min');
   assert.equal(TG.formatMinutes(125 * MIN), '2 h 05 min');
   assert.equal(TG.formatMinutes(Infinity), 'unlimited');
+});
+
+test('parseSiteList reads plain lists, full addresses, CSV and missing minutes', () => {
+  const text = [
+    '\uFEFFsite,minutes',
+    'youtube.com 60',
+    'https://www.reddit.com/r/all, 20',
+    'tiktok.com',
+    '  # a comment',
+    '',
+    'twitch.tv\t45',
+    'netflix.com; 90',
+    'x.com 15min   # trailing comment',
+    'YouTube.com 45',
+  ].join('\r\n');
+  const { sites, errors, duplicates } = TG.parseSiteList(text, 30);
+  assert.deepEqual(errors, []);
+  assert.equal(duplicates, 1);
+  assert.deepEqual(sites, [
+    { domain: 'youtube.com', limitMin: 45 },
+    { domain: 'reddit.com', limitMin: 20 },
+    { domain: 'tiktok.com', limitMin: 30 },
+    { domain: 'twitch.tv', limitMin: 45 },
+    { domain: 'netflix.com', limitMin: 90 },
+    { domain: 'x.com', limitMin: 15 },
+  ]);
+});
+
+test('parseSiteList skips bad lines and says which', () => {
+  const { sites, errors } = TG.parseSiteList('ok.com 5\nnot a site\nzero.com 0\nhuge.com 5000\nhalf.com 2.5\nlocalhost 10', 30);
+  assert.deepEqual(sites, [{ domain: 'ok.com', limitMin: 5 }]);
+  const all = errors.join('\n');
+  assert.match(all, /Line 2: "not" isn't a website address/);
+  assert.match(all, /Line 3: "0" isn't a valid number of minutes for zero.com/);
+  assert.match(all, /Line 4: "5000"/);
+  assert.match(all, /Line 5: "2.5"/);
+  assert.match(all, /Line 6: "localhost"/);
+  assert.match(TG.parseSiteList('a.com', NaN).errors[0], /no minutes given for a.com/);
+});
+
+test('parseSiteList handles a large list quickly', () => {
+  const text = Array.from({ length: 5000 }, (_, i) => `site${i}.example.com ${(i % 120) + 1}`).join('\n');
+  const t0 = Date.now();
+  const { sites, errors } = TG.parseSiteList(text, 30);
+  assert.equal(sites.length, 5000);
+  assert.deepEqual(errors, []);
+  assert.ok(Date.now() - t0 < 500);
+});
+
+test('mergeSites adds new sites, updates changed ones, counts the rest', () => {
+  const existing = [{ domain: 'youtube.com', limitMin: 60 }, { domain: 'reddit.com', limitMin: 20 }];
+  const r = TG.mergeSites(existing, [
+    { domain: 'youtube.com', limitMin: 30 },
+    { domain: 'reddit.com', limitMin: 20 },
+    { domain: 'tiktok.com', limitMin: 10 },
+  ]);
+  assert.deepEqual(r.sites, [{ domain: 'youtube.com', limitMin: 30 }, { domain: 'reddit.com', limitMin: 20 }, { domain: 'tiktok.com', limitMin: 10 }]);
+  assert.deepEqual([r.added, r.updated, r.unchanged], [1, 1, 1]);
+  assert.equal(existing[0].limitMin, 60, 'input not modified');
 });

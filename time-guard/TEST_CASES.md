@@ -54,11 +54,12 @@ Mark each ✅ / ❌.
 
 | ID | Steps | Expected |
 |---|---|---|
-| E1 | On the block page, enter a wrong code and click **15 more minutes**. | "That code isn't right." |
+| E1 | On the block page, enter a wrong code and click **1 more minute**. | "That code isn't right." |
 | E2 | Enter the current code and click **15 more minutes**. | "You have 15 more minutes on youtube.com." **Continue** returns to the exact page you were on. |
 | E3 | Popup after E2. | youtube.com shows "15 min extra left", draining only while you use it. |
 | E4 | When the 15 minutes run out. | Blocked again. |
-| E5 | Unlock with **Rest of today**. | Popup shows "unlocked for today"; no further blocks until midnight. |
+| E5 | Unlock with **1 more minute**. | Blocked again about a minute later (up to 30 s late). |
+| E5b | Unlock with **30 more minutes**, then once more with a new code. | Popup shows about 60 min extra left: chunks add up. |
 | E6 | Reuse the code you just used (within 30 s) on another blocked site. | Rejected. Wait for the next code. |
 | E7 | Enter 5 wrong codes in a row. | "Locked for 2 minutes"; even a correct code is refused until then. |
 
@@ -67,7 +68,7 @@ Mark each ✅ / ❌.
 | ID | Steps | Expected |
 |---|---|---|
 | F1 | Leave a block page open across midnight (or change your computer's clock forward, then back). | After midnight the page returns you to the site by itself; usage starts from zero. |
-| F2 | A "Rest of today" unlock from yesterday. | No longer applies. |
+| F2 | Extra time left over from yesterday. | Gone; today starts from your normal limits. |
 
 ## G. Incognito (with "Allow in Incognito" on)
 
@@ -83,6 +84,21 @@ Mark each ✅ / ❌.
 | H1 | Settings → Authenticator: enter a wrong code. | Refused. |
 | H2 | Enter a current code. | A new QR appears. Scan it as a new entry and confirm with its code. |
 | H3 | Try a code from the old entry on a block page. | Refused. The new entry's code works. |
+
+## J. Importing a site list
+
+Use `examples/test-sites.txt`.
+
+| ID | Steps | Expected |
+|---|---|---|
+| J1 | Settings → Daily limits → **Import a list of sites**. Leave "Minutes for sites without a time" at 30. **Choose file…** → `test-sites.txt`. | "test-sites.txt: 52 added, 0 changed. Review the list, then Save to apply." Also: "1 site was listed more than once", and "Skipped 3 lines" with lines 81–83 listed. |
+| J2 | Scroll the site list before saving. | 52 sites. youtube.com shows 45 (the later duplicate), news.ycombinator.com and cnn.com show 30 (the default), roblox.com 30, chess.com 45, ebay.com 15. |
+| J3 | Close the settings page without saving, reopen it. | The import is gone; nothing was saved. |
+| J4 | Import again and click **Save changes**. | "Saved." No code asked, since everything was added. |
+| J5 | Open example.com and wait 1 minute. | Blocked: a quick way to see a block. example.org (1 min) and example.net (2 min) too. |
+| J6 | Edit the file: change `youtube.com 45` to `youtube.com 90`. Import it, Save. | Asks for a code: "raising youtube.com from 45 to 90 min". |
+| J7 | Import a file with only `# comments`. | "No sites found in …"; nothing changes. |
+| J8 | Cleanup: remove the test sites you don't want, Save, and enter a code. | Saved. Removing needs a code. |
 
 ## I. Not broken elsewhere
 
